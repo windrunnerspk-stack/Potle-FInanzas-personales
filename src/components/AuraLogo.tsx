@@ -35,39 +35,39 @@ export const AuraLogo: React.FC<AuraLogoProps> = ({
       >
         <defs>
           <linearGradient id="auraBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#0c1220" />
-            <stop offset="50%" stop-color="#070a13" />
-            <stop offset="100%" stop-color="#03050a" />
+            <stop offset="0%" stopColor="#0c1220" />
+            <stop offset="50%" stopColor="#070a13" />
+            <stop offset="100%" stopColor="#03050a" />
           </linearGradient>
 
           <radialGradient id="auraRadialGlow" cx="50%" cy="45%" r="55%">
-            <stop offset="0%" stop-color="#10b981" stop-opacity="0.35" />
-            <stop offset="50%" stop-color="#06b6d4" stop-opacity="0.15" />
-            <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
+            <stop offset="50%" stopColor="#06b6d4" stopOpacity="0.15" />
+            <stop offset="100%" stopColor="#000000" stopOpacity="0" />
           </radialGradient>
 
           <linearGradient id="auraRimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#34d399" stop-opacity="0.8" />
-            <stop offset="50%" stop-color="#06b6d4" stop-opacity="0.4" />
-            <stop offset="100%" stop-color="#10b981" stop-opacity="0.15" />
+            <stop offset="0%" stopColor="#34d399" stopOpacity="0.8" />
+            <stop offset="50%" stopColor="#06b6d4" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0.15" />
           </linearGradient>
 
           <linearGradient id="auraLeftStem" x1="0%" y1="100%" x2="50%" y2="0%">
-            <stop offset="0%" stop-color="#047857" />
-            <stop offset="45%" stop-color="#10b981" />
-            <stop offset="100%" stop-color="#34d399" />
+            <stop offset="0%" stopColor="#047857" />
+            <stop offset="45%" stopColor="#10b981" />
+            <stop offset="100%" stopColor="#34d399" />
           </linearGradient>
 
           <linearGradient id="auraRightStem" x1="50%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#38bdf8" />
-            <stop offset="55%" stop-color="#06b6d4" />
-            <stop offset="100%" stop-color="#0f766e" />
+            <stop offset="0%" stopColor="#38bdf8" />
+            <stop offset="55%" stopColor="#06b6d4" />
+            <stop offset="100%" stopColor="#0f766e" />
           </linearGradient>
 
           <linearGradient id="auraChevronGrad" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stop-color="#10b981" />
-            <stop offset="50%" stop-color="#6ee7b7" />
-            <stop offset="100%" stop-color="#a7f3d0" />
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="50%" stopColor="#6ee7b7" />
+            <stop offset="100%" stopColor="#a7f3d0" />
           </linearGradient>
 
           <filter id="auraGlowFilter" x="-20%" y="-20%" width="140%" height="140%">
