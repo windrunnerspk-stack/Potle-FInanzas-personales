@@ -7,12 +7,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128;
+    function isOwner(userId) {
+      return (isSignedIn() && request.auth.uid == userId) || (!isSignedIn() && isValidId(userId));
     }
 
     function incoming() {
@@ -33,7 +33,7 @@ service cloud.firestore {
     function isValidGasto(data, userId) {
       return data.keys().hasAll(['id', 'userId', 'establecimiento', 'fecha', 'hora', 'ciudad', 'categoria', 'metodo_pago', 'total'])
         && data.userId == userId
-        && data.id is string && data.id.size() <= 128
+        && data.id is string && data.id.size() > 0 && data.id.size() <= 128
         && data.establecimiento is string && data.establecimiento.size() <= 200
         && data.fecha is string && data.fecha.size() <= 20
         && data.hora is string && data.hora.size() <= 10

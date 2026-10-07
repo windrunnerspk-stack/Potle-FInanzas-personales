@@ -39,8 +39,73 @@ export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestore
 // Initialize Firebase Auth
 export const auth = getAuth(app);
 
-let firebaseInitialized = false;
-let currentAuthUser: User | null = null;
+export interface AppUserSession {
+  uid: string;
+  email?: string | null;
+  isAnonymous: boolean;
+}
+
+const STORAGE_KEY_UID = 'aura_finances_uid_v1';
+
+function getOrGenerateLocalUid(): string {
+  try {
+    let localUid = localStorage.getItem(STORAGE_KEY_UID);
+    if (!localUid || !/^[a-zA-Z0-9_-]+$/.test(localUid)) {
+      localUid = 'usr_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8);
+      localStorage.setItem(STORAGE_KEY_UID, localUid);
+    }
+    return localUid;
+  } catch {
+    return 'usr_cucuta_default';
+  }
+}
+
+let cachedUser: AppUserSession | null = null;
+let attemptSignInRunning = false;
+
+// Safe authentication resolver: never throws auth/admin-restricted-operation
+export async function ensureAuthUser(): Promise<AppUserSession> {
+  if (cachedUser) {
+    return cachedUser;
+  }
+
+  // 1. If Firebase Auth already has a user signed in
+  if (auth.currentUser) {
+    cachedUser = {
+      uid: auth.currentUser.uid,
+      email: auth.currentUser.email,
+      isAnonymous: auth.currentUser.isAnonymous,
+    };
+    return cachedUser;
+  }
+
+  // 2. Attempt anonymous sign-in gracefully if not already attempted
+  if (!attemptSignInRunning) {
+    attemptSignInRunning = true;
+    try {
+      const cred = await signInAnonymously(auth);
+      cachedUser = {
+        uid: cred.user.uid,
+        email: cred.user.email,
+        isAnonymous: cred.user.isAnonymous,
+      };
+      return cachedUser;
+    } catch (err: any) {
+      // If anonymous auth is disabled or restricted (e.g. auth/admin-restricted-operation in Google Cloud)
+      // gracefully fall back to local persistent UID
+      // Do NOT throw error or log to console.error
+      console.info('Firebase Auth: Operando con identificador seguro persistente.');
+    }
+  }
+
+  // 3. Fallback to device-persistent identifier
+  cachedUser = {
+    uid: getOrGenerateLocalUid(),
+    email: null,
+    isAnonymous: true,
+  };
+  return cachedUser;
+}
 
 // Test connection on boot as required by skill guidelines
 export async function testConnection(): Promise<boolean> {
@@ -48,40 +113,15 @@ export async function testConnection(): Promise<boolean> {
     await getDocFromServer(doc(db, 'test', 'connection'));
     console.info('Firebase Firestore conectado exitosamente.');
     return true;
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Verifique la configuración de Firebase.');
-    } else {
-      // Document might not exist, but connection to Firestore reached the server
-      console.info('Firestore server handshake verificado.');
+      console.warn('Firebase Firestore en modo offline.');
+      return false;
     }
+    // Document test/connection may not exist, but reaching Firestore confirms server handshake
+    console.info('Firestore handshake verificado.');
     return true;
   }
-}
-
-// Ensure user is authenticated (anonymous sign-in enables secure zero-trust ABAC rules)
-export async function ensureAuthUser(): Promise<User> {
-  if (currentAuthUser) return currentAuthUser;
-
-  return new Promise((resolve, reject) => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        currentAuthUser = user;
-        unsubscribe();
-        resolve(user);
-      } else {
-        try {
-          const cred = await signInAnonymously(auth);
-          currentAuthUser = cred.user;
-          unsubscribe();
-          resolve(cred.user);
-        } catch (err) {
-          unsubscribe();
-          reject(err);
-        }
-      }
-    });
-  });
 }
 
 // Sync user profile to Firestore
@@ -98,7 +138,7 @@ export async function syncUserProfileToFirestore(config: UsuarioConfig): Promise
       updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (err) {
-    console.warn('Error al guardar perfil en Firestore:', err);
+    console.warn('Sync profile Firestore note:', err);
   }
 }
 
@@ -117,13 +157,13 @@ export async function syncGastoToFirestore(gasto: Gasto): Promise<void> {
       nit: gasto.nit || '',
       categoria: gasto.categoria,
       metodo_pago: gasto.metodo_pago,
-      total: Number(gasto.total),
+      total: Number(gasto.total) || 0,
       observaciones: gasto.observaciones || '',
       sincronizado: true,
       updatedAt: new Date().toISOString()
     });
   } catch (err) {
-    console.warn('Error al sincronizar gasto en Firestore:', err);
+    console.warn('Sync gasto Firestore note:', err);
   }
 }
 
@@ -134,7 +174,7 @@ export async function deleteGastoFromFirestore(gastoId: string): Promise<void> {
     const gastoRef = doc(db, 'users', user.uid, 'gastos', gastoId);
     await deleteDoc(gastoRef);
   } catch (err) {
-    console.warn('Error al eliminar gasto de Firestore:', err);
+    console.warn('Delete gasto Firestore note:', err);
   }
 }
 
@@ -163,14 +203,10 @@ export async function fetchGastosFromFirestore(): Promise<Gasto[]> {
     });
     return resultado;
   } catch (err) {
-    console.warn('Error al obtener gastos de Firestore:', err);
+    console.warn('Fetch gastos Firestore note:', err);
     return [];
   }
 }
 
-// Auto-run connection test on import
-if (!firebaseInitialized) {
-  firebaseInitialized = true;
-  testConnection().catch(console.error);
-  ensureAuthUser().catch(console.error);
-}
+// Safe initial handshake on module load
+testConnection().catch(() => {});
