@@ -67,11 +67,11 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
             >
               Aura Finance
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                React Native
+                Android Release • Firebase
               </span>
             </h1>
             <p className={`text-xs ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-              Gestor de Gastos y Facturas • 100% Offline con SQLite
+              Gestor de Gastos y Facturas • Android APK & Firebase Firestore
             </p>
           </div>
         </div>

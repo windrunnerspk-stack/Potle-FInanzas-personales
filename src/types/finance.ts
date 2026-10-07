@@ -16,7 +16,7 @@ export interface Gasto {
   fecha: string; // YYYY-MM-DD
   hora: string; // HH:mm
   ciudad: string;
-  nit: string;
+  nit?: string;
   categoria: CategoriaGasto;
   metodo_pago: MetodoPago;
   total: number;

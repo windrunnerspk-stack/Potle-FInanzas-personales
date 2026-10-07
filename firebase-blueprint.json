@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Perfil y configuración del usuario en Aura Finanzas",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string"
+        },
+        "modo": {
+          "type": "string"
+        },
+        "moneda": {
+          "type": "string"
+        },
+        "ciudad": {
+          "type": "string"
+        },
+        "google_sheets_id": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["email", "modo", "moneda"]
+    },
+    "Gasto": {
+      "title": "Gasto",
+      "description": "Factura o comprobante de gasto del usuario",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "establecimiento": {
+          "type": "string"
+        },
+        "fecha": {
+          "type": "string"
+        },
+        "hora": {
+          "type": "string"
+        },
+        "ciudad": {
+          "type": "string"
+        },
+        "nit": {
+          "type": "string"
+        },
+        "categoria": {
+          "type": "string"
+        },
+        "metodo_pago": {
+          "type": "string"
+        },
+        "total": {
+          "type": "number"
+        },
+        "observaciones": {
+          "type": "string"
+        },
+        "sincronizado": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "userId", "establecimiento", "fecha", "hora", "ciudad", "categoria", "metodo_pago", "total"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Configuración y perfil del usuario autenticado"
+    },
+    "/users/{userId}/gastos/{gastoId}": {
+      "schema": "Gasto",
+      "description": "Gastos y facturas registradas por el usuario"
+    }
+  }
+}

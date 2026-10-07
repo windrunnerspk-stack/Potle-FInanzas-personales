@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['email', 'modo', 'moneda'])
+        && data.email is string && data.email.size() <= 200
+        && data.modo is string && data.modo.size() <= 50
+        && data.moneda is string && data.moneda.size() <= 10;
+    }
+
+    function isValidGasto(data, userId) {
+      return data.keys().hasAll(['id', 'userId', 'establecimiento', 'fecha', 'hora', 'ciudad', 'categoria', 'metodo_pago', 'total'])
+        && data.userId == userId
+        && data.id is string && data.id.size() <= 128
+        && data.establecimiento is string && data.establecimiento.size() <= 200
+        && data.fecha is string && data.fecha.size() <= 20
+        && data.hora is string && data.hora.size() <= 10
+        && data.ciudad is string && data.ciudad.size() <= 100
+        && data.categoria is string && data.categoria.size() <= 100
+        && data.metodo_pago is string && data.metodo_pago.size() <= 100
+        && data.total is number && data.total > 0;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Health check / connection test
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // User Profile
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create, update: if isOwner(userId) && isValidUserProfile(incoming());
+      allow delete: if false;
+
+      // Expenses Subcollection
+      match /gastos/{gastoId} {
+        allow get, delete: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidGasto(incoming(), userId);
+        allow update: if isOwner(userId) && isValidGasto(incoming(), userId);
+      }
+    }
+  }
+}

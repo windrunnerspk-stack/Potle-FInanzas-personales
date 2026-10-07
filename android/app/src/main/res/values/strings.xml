@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Aura Finanzas</string>
+    <string name="title_activity_main">Aura Finanzas</string>
+    <string name="package_name">com.aurafinanzas.app</string>
+    <string name="custom_url_scheme">com.aurafinanzas.app</string>
+</resources>

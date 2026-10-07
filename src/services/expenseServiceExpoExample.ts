@@ -42,9 +42,7 @@ export function validarGasto(dto: NuevoGastoDTO): { valido: boolean; mensajeErro
   if (!dto.ciudad || dto.ciudad.trim().length === 0) {
     return { valido: false, mensajeError: 'La ciudad donde se realizó la compra es obligatoria.' };
   }
-  if (!dto.nit || dto.nit.trim().length === 0) {
-    return { valido: false, mensajeError: 'El NIT o documento fiscal del emisor es obligatorio.' };
-  }
+  // El NIT es opcional
   if (!LISTA_CATEGORIAS.includes(dto.categoria)) {
     return { valido: false, mensajeError: 'La categoría seleccionada no es válida dentro del catálogo oficial.' };
   }

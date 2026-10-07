@@ -662,11 +662,11 @@ export function procesarImportacionGoogleSheets(textoCrudo: string): ResultadoIm
       hora = hora.trim().slice(0, 5);
     }
 
-    // 6. Extraer NIT
-    const nit = (mapaColumnas.nit !== undefined ? fila[mapaColumnas.nit] : '') || 'Consumidor Final';
+    // 6. Extraer NIT (opcional)
+    const nit = (mapaColumnas.nit !== undefined ? fila[mapaColumnas.nit] : '') || '';
 
-    // 7. Extraer Ciudad
-    const ciudad = (mapaColumnas.ciudad !== undefined ? fila[mapaColumnas.ciudad] : '') || 'Bogotá';
+    // 7. Extraer Ciudad (Cúcuta por defecto)
+    const ciudad = (mapaColumnas.ciudad !== undefined ? fila[mapaColumnas.ciudad] : '') || 'Cúcuta';
 
     // 8. Extraer Método de Pago
     const metodoRaw = mapaColumnas.metodo_pago !== undefined ? fila[mapaColumnas.metodo_pago] : '';
@@ -684,7 +684,7 @@ export function procesarImportacionGoogleSheets(textoCrudo: string): ResultadoIm
       fecha,
       hora,
       ciudad: ciudad.trim(),
-      nit: nit.trim(),
+      nit: nit ? nit.trim() : undefined,
       categoria,
       metodo_pago,
       total,
@@ -782,29 +782,29 @@ export async function descargarGoogleSheetsCSV(url: string): Promise<{
 export function generarPlantillaGoogleSheets(): string {
   const encabezado = 'Fecha,Hora,Establecimiento,NIT,Categoria,Metodo_Pago,Ciudad,Total,Observaciones';
   const ejemplos = [
-    '2026-10-06,08:45,Estación Terpel Calle 100,860.005.224-6,Gasolina,Tarjeta Crédito,Bogotá,145000,Tanque lleno corriente',
-    '2026-10-06,14:20,Éxito Calle 80,890.900.608-9,Mercado,Tarjeta Débito,Bogotá,320500,Mercado quincenal',
-    '2026-10-06,17:15,Oxxo Parque 93,900.254.123-1,Snacks,Efectivo,Bogotá,18500,Café y galletas',
-    '2026-10-05,19:30,Crepes & Waffles Zona T,860.519.894-3,Restaurantes,Tarjeta Débito,Bogotá,89400,Cena familiar',
-    '2026-10-04,11:15,Cruz Verde Droguería,800.149.695-1,Salud,Transferencia,Bogotá,64200,Vitaminas y medicamentos',
-    '2026-10-01,09:00,Inmobiliaria Habitat,900.845.120-7,Vivienda,Transferencia,Bogotá,2150000,Arriendo del mes',
-    '2026-09-28,03:00,Netflix Suscripción,901.388.940-2,Suscripciones,Tarjeta Crédito,Bogotá,44900,Plan Premium 4k',
-    '2026-09-25,18:40,Enel Colombia,860.003.559-7,Servicios,Transferencia,Bogotá,185000,Factura energía eléctrica',
-    '2026-09-22,16:00,Binance Exchange,000.000.000-0,Crypto,Transferencia,Bogotá,500000,Aporte mensual USDT/BTC',
-    '2026-09-18,20:00,PlayStation Store,900.111.222-3,Videojuegos,Tarjeta Crédito,Bogotá,189000,Pase de temporada',
-    '2026-09-15,10:30,Universidad Andes,860.007.386-1,Educación,Transferencia,Bogotá,1200000,Especialización software',
-    '2026-09-12,15:30,Zara Titán Plaza,800.222.333-4,Ropa,Tarjeta Crédito,Bogotá,280000,Ropa para oficina',
-    '2026-09-10,14:00,Taller Mecánico El Pistón,900.444.555-6,Taller,Efectivo,Bogotá,210000,Cambio de aceite y pastillas',
-    '2026-09-08,12:00,Secretaría Movilidad,899.999.061-9,Multas,Transferencia,Bogotá,340000,Fotomulta velocidad',
-    '2026-09-05,11:00,Fundación Niños de los Andes,860.024.120-1,Caridad,Transferencia,Bogotá,100000,Donación mensual',
-    '2026-09-02,18:00,Pastelería Santa Elena,860.055.123-4,Cumpleaños,Tarjeta Débito,Bogotá,95000,Torta de cumpleaños',
-    '2026-08-30,22:00,BetPlay Colombia,901.123.456-7,Apuestas,Transferencia,Bogotá,50000,Pronóstico deportivo',
-    '2026-08-25,13:00,Uber Technologies,901.444.888-9,Transporte,Tarjeta Crédito,Bogotá,28500,Traslado al aeropuerto',
-    '2026-08-20,10:00,Avianca Airlines,890.100.577-6,Viajes,Tarjeta Crédito,Bogotá,650000,Tiquetes fin de año',
-    '2026-08-15,16:00,Apple Store Unicentro,830.098.712-3,Tecnología,Tarjeta Crédito,Bogotá,980000,Accesorios y cargador',
-    '2026-08-10,19:00,Cine Colombia Unicentro,860.005.124-8,Entretenimiento,Tarjeta Débito,Bogotá,56000,Entradas y combos cine',
-    '2026-08-05,15:00,Amazon Imports,000.000.000-0,Compras,Tarjeta Crédito,Bogotá,320000,Mochila y termo térmico',
-    '2026-08-01,10:00,Papelería Panamericana,860.008.224-5,Otros,Efectivo,Bogotá,35000,Cuadernos y bolígrafos',
+    '2026-10-06,08:45,Estación Terpel Avenida Cero,860.005.224-6,Gasolina,Tarjeta Crédito,Cúcuta,145000,Tanque lleno corriente',
+    '2026-10-06,14:20,Éxito San Mateo,890.900.608-9,Mercado,Tarjeta Débito,Cúcuta,320500,Mercado quincenal',
+    '2026-10-06,17:15,Oxxo Caobos,,Snacks,Efectivo,Cúcuta,18500,Café y galletas',
+    '2026-10-05,19:30,Restaurante Rodizio Cúcuta,860.519.894-3,Restaurantes,Tarjeta Débito,Cúcuta,89400,Cena familiar',
+    '2026-10-04,11:15,Cruz Verde Droguería Cúcuta,,Salud,Transferencia,Cúcuta,64200,Vitaminas y medicamentos',
+    '2026-10-01,09:00,Inmobiliaria del Norte,900.845.120-7,Vivienda,Transferencia,Cúcuta,2150000,Arriendo del mes',
+    '2026-09-28,03:00,Netflix Suscripción,,Suscripciones,Tarjeta Crédito,Cúcuta,44900,Plan Premium 4k',
+    '2026-09-25,18:40,Centrales Eléctricas CENS,860.003.559-7,Servicios,Transferencia,Cúcuta,185000,Factura energía eléctrica',
+    '2026-09-22,16:00,Binance Exchange,,Crypto,Transferencia,Cúcuta,500000,Aporte mensual USDT/BTC',
+    '2026-09-18,20:00,PlayStation Store,,Videojuegos,Tarjeta Crédito,Cúcuta,189000,Pase de temporada',
+    '2026-09-15,10:30,Universidad UFPS Cúcuta,860.007.386-1,Educación,Transferencia,Cúcuta,1200000,Especialización software',
+    '2026-09-12,15:30,Zara Ventura Plaza,800.222.333-4,Ropa,Tarjeta Crédito,Cúcuta,280000,Ropa para oficina',
+    '2026-09-10,14:00,Taller Mecánico La Cero,900.444.555-6,Taller,Efectivo,Cúcuta,210000,Cambio de aceite y pastillas',
+    '2026-09-08,12:00,Secretaría Tránsito Cúcuta,899.999.061-9,Multas,Transferencia,Cúcuta,340000,Fotomulta velocidad',
+    '2026-09-05,11:00,Fundación Esperanza Cúcuta,,Caridad,Transferencia,Cúcuta,100000,Donación mensual',
+    '2026-09-02,18:00,Pastelería Santa Elena Cúcuta,,Cumpleaños,Tarjeta Débito,Cúcuta,95000,Torta de cumpleaños',
+    '2026-08-30,22:00,BetPlay Colombia,,Apuestas,Transferencia,Cúcuta,50000,Pronóstico deportivo',
+    '2026-08-25,13:00,Transporte Terminal Cúcuta,,Transporte,Tarjeta Crédito,Cúcuta,28500,Traslado al aeropuerto Camilo Daza',
+    '2026-08-20,10:00,Avianca Airlines Camilo Daza,890.100.577-6,Viajes,Tarjeta Crédito,Cúcuta,650000,Tiquetes fin de año',
+    '2026-08-15,16:00,Apple Ventura Plaza,,Tecnología,Tarjeta Crédito,Cúcuta,980000,Accesorios y cargador',
+    '2026-08-10,19:00,Cine Colombia Ventura Plaza,,Entretenimiento,Tarjeta Débito,Cúcuta,56000,Entradas y combos cine',
+    '2026-08-05,15:00,Amazon Imports,,Compras,Tarjeta Crédito,Cúcuta,320000,Mochila y termo térmico',
+    '2026-08-01,10:00,Papelería Cúcuta Centro,,Otros,Efectivo,Cúcuta,35000,Cuadernos y bolígrafos',
   ];
 
   return [encabezado, ...ejemplos].join('\n');

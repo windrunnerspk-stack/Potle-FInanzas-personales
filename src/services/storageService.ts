@@ -8,6 +8,12 @@ import {
   CATEGORIAS_CONFIG_DEFAULT
 } from '../types/finance';
 import { normalizarCategoria } from './googleSheetsImportService';
+import {
+  syncGastoToFirestore,
+  deleteGastoFromFirestore,
+  fetchGastosFromFirestore,
+  syncUserProfileToFirestore
+} from './firebase';
 
 const STORAGE_KEY_GASTOS = 'aura_finances_gastos_v1';
 const STORAGE_KEY_CONFIG = 'aura_finances_config_v1';
@@ -195,6 +201,7 @@ export function guardarConfiguracion(config: Partial<UsuarioConfig>): UsuarioCon
   const actual = obtenerConfiguracion();
   const actualizada = { ...actual, ...config };
   localStorage.setItem(STORAGE_KEY_CONFIG, JSON.stringify(actualizada));
+  syncUserProfileToFirestore(actualizada).catch((e) => console.warn('Sync profile error:', e));
   return actualizada;
 }
 
@@ -280,6 +287,9 @@ export function guardarGasto(nuevoGasto: Omit<Gasto, 'id' | 'sincronizado' | 'cr
   const actualizada = [gasto, ...lista];
   localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(actualizada));
 
+  // Sincronizar en tiempo real con Firestore
+  syncGastoToFirestore(gasto).catch((e) => console.warn('Sync gasto error:', e));
+
   if (config.modo === 'sincronizado') {
     encolarSync(gasto.id, 'CREATE', gasto);
   }
@@ -291,6 +301,7 @@ export function eliminarGasto(id: string): void {
   const lista = obtenerGastos();
   const filtrada = lista.filter((g) => g.id !== id);
   localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(filtrada));
+  deleteGastoFromFirestore(id).catch((e) => console.warn('Delete firestore gasto error:', e));
 }
 
 /**
@@ -325,6 +336,9 @@ export function importarGastosDesdeGoogleSheets(
   });
 
   localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(resultadoFinal));
+
+  // Sincronizar gastos importados con Firestore
+  Promise.all(gastosLimpios.map(g => syncGastoToFirestore(g))).catch((e) => console.warn('Firestore import sync error:', e));
 
   // Actualizar fecha de sincronización
   guardarConfiguracion({
@@ -392,6 +406,42 @@ export function sincronizarTodoConGoogleSheets(): { sincronizados: number; resum
     sincronizados: pendientes,
     resumen: `${pendientes} facturas subidas a Google Sheets y confirmación despachada a ${config.email}`,
   };
+}
+
+export async function sincronizarConFirebase(): Promise<{ totalSincronizados: number; mensaje: string }> {
+  try {
+    const locales = obtenerGastos();
+    const config = obtenerConfiguracion();
+    await syncUserProfileToFirestore(config);
+    
+    // Subir todos los gastos locales a Firestore
+    for (const g of locales) {
+      await syncGastoToFirestore(g);
+    }
+
+    // Traer los existentes de Firestore para fusionar si hay nuevos
+    const remotos = await fetchGastosFromFirestore();
+    const mapa = new Map<string, Gasto>();
+    locales.forEach(g => mapa.set(g.id, g));
+    remotos.forEach(g => {
+      if (!mapa.has(g.id)) {
+        mapa.set(g.id, g);
+      }
+    });
+
+    const listaUnificada = Array.from(mapa.values());
+    localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(listaUnificada));
+
+    return {
+      totalSincronizados: listaUnificada.length,
+      mensaje: `Sincronización completa con Firebase Firestore (${listaUnificada.length} comprobantes activos)`
+    };
+  } catch (err: any) {
+    return {
+      totalSincronizados: 0,
+      mensaje: `Error al sincronizar con Firebase: ${err.message || 'Error de red'}`
+    };
+  }
 }
 
 export function formatearMoneda(monto: number, moneda: string = 'COP'): string {

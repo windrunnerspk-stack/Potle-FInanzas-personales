@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { Plus, FileSpreadsheet } from 'lucide-react';
+import { Plus, FileSpreadsheet, Smartphone } from 'lucide-react';
 import { Gasto, UsuarioConfig } from './types/finance';
 import {
   obtenerGastos,
@@ -21,6 +21,7 @@ import { SyncSheetModal } from './components/SyncSheetModal';
 import { WidgetPreview } from './components/WidgetPreview';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DevArchitectureModal } from './components/DevArchitectureModal';
+import { AndroidReleaseModal } from './components/AndroidReleaseModal';
 import { useTheme } from './context/ThemeContext';
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
   const [mostrarSyncModal, setMostrarSyncModal] = useState(false);
   const [pestañaSyncModal, setPestañaSyncModal] = useState<'importar' | 'sheet' | 'email'>('importar');
   const [mostrarDevHub, setMostrarDevHub] = useState(false);
+  const [mostrarAndroidModal, setMostrarAndroidModal] = useState(false);
 
   const handleOpenImportSheet = (tab: 'importar' | 'sheet' | 'email' = 'importar') => {
     setPestañaSyncModal(tab);
@@ -106,7 +108,15 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMostrarAndroidModal(true)}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition-all cursor-pointer shadow-sm"
+              title="Android Release APK y Firebase Activo"
+            >
+              <Smartphone size={11} />
+              <span>Android APK</span>
+            </button>
             <button
               onClick={() => handleOpenImportSheet('importar')}
               className={`text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ${
@@ -302,6 +312,12 @@ export default function App() {
       <AnimatePresence>
         {mostrarDevHub && (
           <DevArchitectureModal onClose={() => setMostrarDevHub(false)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {mostrarAndroidModal && (
+          <AndroidReleaseModal onClose={() => setMostrarAndroidModal(false)} />
         )}
       </AnimatePresence>
     </div>

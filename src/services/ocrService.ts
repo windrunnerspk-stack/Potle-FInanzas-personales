@@ -127,7 +127,7 @@ export function procesarTextoFactura(texto: string): ResultadoOCR {
     establecimientoDetectado: establecimientoDetectado || 'Comercio Local',
     fechaDetectada: fechaDetectada || new Date().toISOString().split('T')[0],
     horaDetectada: horaDetectada || new Date().toTimeString().slice(0, 5),
-    nitDetectado: nitDetectado || '890.900.608-1',
+    nitDetectado: nitDetectado || '',
     totalDetectado: totalDetectado || 45000,
     categoriaSugerida,
     confianza,

@@ -35,7 +35,7 @@ interface ManualExpenseFormProps {
   onSaved: (gasto: Gasto) => void;
 }
 
-const CIUDADES_FRECUENTES = ['Bogotá', 'Medellín', 'Cali', 'Barranquilla', 'Cartagena', 'Bucaramanga'];
+const CIUDADES_FRECUENTES = ['Cúcuta', 'Bogotá', 'Medellín', 'Cali', 'Barranquilla', 'Bucaramanga', 'Cartagena'];
 const ESTABLECIMIENTOS_FRECUENTES = [
   { nombre: 'Terpel', nit: '860.005.224-6', cat: 'Gasolina' as CategoriaGasto },
   { nombre: 'Éxito', nit: '890.900.608-9', cat: 'Mercado' as CategoriaGasto },
@@ -58,7 +58,7 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
   const [establecimiento, setEstablecimiento] = useState(initialValues?.establecimiento || '');
   const [fecha, setFecha] = useState(initialValues?.fecha || fechaHoy);
   const [hora, setHora] = useState(initialValues?.hora || horaActual);
-  const [ciudad, setCiudad] = useState(initialValues?.ciudad || 'Bogotá');
+  const [ciudad, setCiudad] = useState(initialValues?.ciudad || 'Cúcuta');
   const [nit, setNit] = useState(initialValues?.nit || '');
   const [categoria, setCategoria] = useState<CategoriaGasto>(initialValues?.categoria || 'Gasolina');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>(initialValues?.metodo_pago || 'Tarjeta Débito');
@@ -83,7 +83,7 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
     if (!fecha) nuevosErrores.fecha = 'La fecha es obligatoria';
     if (!hora) nuevosErrores.hora = 'La hora es obligatoria';
     if (!ciudad.trim()) nuevosErrores.ciudad = 'La ciudad es obligatoria';
-    if (!nit.trim()) nuevosErrores.nit = 'El NIT/Identificación fiscal es obligatorio';
+    // El NIT es opcional
     const numTotal = parseFloat(total);
     if (!total || isNaN(numTotal) || numTotal <= 0) {
       nuevosErrores.total = 'Ingresa un monto numérico mayor a cero';
@@ -314,14 +314,14 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
               </div>
             </div>
 
-            {/* NIT / Identificación Tributaria */}
+            {/* NIT / Identificación Tributaria (Opcional) */}
             <div>
               <label
                 className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
                   isDark ? 'text-neutral-300' : 'text-slate-700'
                 }`}
               >
-                NIT / RUT / Documento Fiscal Emisor
+                NIT / Documento Fiscal <span className="text-[10px] lowercase text-neutral-400 font-normal">(opcional)</span>
               </label>
               <div className="relative">
                 <FileText size={16} className={`absolute left-3.5 top-3.5 ${isDark ? 'text-neutral-400' : 'text-slate-400'}`} />
@@ -329,19 +329,14 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
                   type="text"
                   value={nit}
                   onChange={(e) => setNit(e.target.value)}
-                  placeholder="860.005.224-6"
+                  placeholder="Ej. 860.005.224-6 (opcional)"
                   className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none ${
                     isDark
-                      ? `bg-neutral-950/70 text-white placeholder-neutral-500 ${
-                          errores.nit ? 'border-rose-500' : 'border-neutral-800 focus:border-emerald-500'
-                        }`
-                      : `bg-slate-50 text-slate-900 placeholder-slate-400 ${
-                          errores.nit ? 'border-rose-500' : 'border-slate-200 focus:border-emerald-500'
-                        }`
+                      ? 'bg-neutral-950/70 text-white placeholder-neutral-500 border-neutral-800 focus:border-emerald-500'
+                      : 'bg-slate-50 text-slate-900 placeholder-slate-400 border-slate-200 focus:border-emerald-500'
                   }`}
                 />
               </div>
-              {errores.nit && <p className="text-rose-500 text-xs mt-1">{errores.nit}</p>}
             </div>
 
             {/* Fecha y Hora en 2 columnas */}

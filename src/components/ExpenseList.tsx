@@ -88,7 +88,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
       if (busqueda.trim()) {
         const query = busqueda.toLowerCase().trim();
         const coincideEstablecimiento = g.establecimiento.toLowerCase().includes(query);
-        const coincideNit = g.nit.toLowerCase().includes(query);
+        const coincideNit = g.nit ? g.nit.toLowerCase().includes(query) : false;
         const coincideCiudad = g.ciudad.toLowerCase().includes(query);
         const coincideObs = g.observaciones ? g.observaciones.toLowerCase().includes(query) : false;
         if (!coincideEstablecimiento && !coincideNit && !coincideCiudad && !coincideObs) {
@@ -626,7 +626,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                     NIT / Doc. Fiscal:
                   </span>
                   <span className={`font-mono font-medium ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    {detalleGasto.nit}
+                    {detalleGasto.nit || 'No especificado'}
                   </span>
                 </div>
                 <div
