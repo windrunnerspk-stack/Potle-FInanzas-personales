@@ -49,14 +49,11 @@ jobs:
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Java JDK (v17 - Temurin)
+      - name: Configurar Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Configurar Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Configurar Node.js (v22 LTS)
         uses: actions/setup-node@v4
@@ -78,12 +75,12 @@ jobs:
       - name: Compilar APK Debug (Instalación directa en celular)
         run: |
           cd android
-          ./gradlew assembleDebug --stacktrace --no-daemon
+          ./gradlew assembleDebug --no-daemon
 
       - name: Compilar APK Release
         run: |
           cd android
-          ./gradlew assembleRelease --stacktrace --no-daemon || echo "assembleRelease finalizado"
+          ./gradlew assembleRelease --no-daemon || echo "assembleRelease finalizado"
 
       - name: Subir APK Debug como Artefacto Descargable
         uses: actions/upload-artifact@v4
