@@ -49,11 +49,11 @@ jobs:
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Java JDK 17
+      - name: Configurar Java JDK 21 (Requerido por Capacitor 8)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Configurar Node.js (v22 LTS)
         uses: actions/setup-node@v4

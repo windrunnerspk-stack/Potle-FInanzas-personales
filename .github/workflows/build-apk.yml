@@ -19,11 +19,11 @@ jobs:
       - name: 📥 Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: ☕ Configurar Java JDK 17
+      - name: ☕ Configurar Java JDK 21 (Requerido por Capacitor 8)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: 🟢 Configurar Node.js 22 LTS
         uses: actions/setup-node@v4
@@ -42,7 +42,7 @@ jobs:
       - name: 🔑 Dar permisos de ejecución al ejecutable Gradle
         run: chmod +x android/gradlew
 
-      - name: 🔨 Compilar APK Debug (Listo para instalar en el móvil)
+      - name: 🔨 Compilar APK Debug (Listo para instalar en cualquier móvil Android)
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon
