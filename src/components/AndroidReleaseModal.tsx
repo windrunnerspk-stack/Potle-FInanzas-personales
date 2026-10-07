@@ -49,6 +49,15 @@ jobs:
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
+      - name: Configurar Java JDK (v17 - Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Configurar Node.js (v22 LTS)
         uses: actions/setup-node@v4
         with:
@@ -60,12 +69,6 @@ jobs:
       - name: Compilar Web App (Vite)
         run: npm run build
 
-      - name: Configurar Java JDK (v17)
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
-
       - name: Sincronizar Capacitor con Android
         run: npx cap sync android
 
@@ -75,12 +78,12 @@ jobs:
       - name: Compilar APK Debug (Instalación directa en celular)
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Compilar APK Release
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon || echo "assembleRelease finalizado"
+          ./gradlew assembleRelease --stacktrace --no-daemon || echo "assembleRelease finalizado"
 
       - name: Subir APK Debug como Artefacto Descargable
         uses: actions/upload-artifact@v4
