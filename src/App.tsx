@@ -35,7 +35,13 @@ export default function App() {
   const [valoresInicialesForm, setValoresInicialesForm] = useState<Partial<Gasto> | undefined>(undefined);
   const [mostrarScanner, setMostrarScanner] = useState(false);
   const [mostrarSyncModal, setMostrarSyncModal] = useState(false);
+  const [pestañaSyncModal, setPestañaSyncModal] = useState<'importar' | 'sheet' | 'email'>('importar');
   const [mostrarDevHub, setMostrarDevHub] = useState(false);
+
+  const handleOpenImportSheet = (tab: 'importar' | 'sheet' | 'email' = 'importar') => {
+    setPestañaSyncModal(tab);
+    setMostrarSyncModal(true);
+  };
 
   // Carga inicial
   useEffect(() => {
@@ -100,14 +106,27 @@ export default function App() {
             </span>
           </div>
 
-          <button
-            onClick={() => setMostrarOnboarding(true)}
-            className={`text-[11px] transition-colors cursor-pointer ${
-              isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-500 hover:text-slate-900 font-medium'
-            }`}
-          >
-            Ajustes
-          </button>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => handleOpenImportSheet('importar')}
+              className={`text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                isDark ? 'text-emerald-400 hover:text-emerald-300' : 'text-emerald-700 hover:text-emerald-800'
+              }`}
+              title="Importar hoja de cálculo de Google Sheets"
+            >
+              <FileSpreadsheet size={13} />
+              <span>Importar Sheet</span>
+            </button>
+            <span className={isDark ? 'text-neutral-700' : 'text-slate-300'}>•</span>
+            <button
+              onClick={() => setMostrarOnboarding(true)}
+              className={`text-[11px] transition-colors cursor-pointer ${
+                isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-500 hover:text-slate-900 font-medium'
+              }`}
+            >
+              Ajustes
+            </button>
+          </div>
         </div>
 
         {/* Tab 1: Mis Gastos & Facturas */}
@@ -116,6 +135,7 @@ export default function App() {
             gastos={gastos}
             onOpenNewExpense={() => handleOpenNewExpense()}
             onRefresh={recargarDatos}
+            onOpenImportSheet={() => handleOpenImportSheet('importar')}
           />
         )}
 
@@ -140,26 +160,38 @@ export default function App() {
                   : 'bg-white border-slate-200/90 text-slate-900'
               }`}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
                     <FileSpreadsheet size={18} />
                   </div>
                   <div>
                     <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      Google Sheets & Correo
+                      Google Sheets & Facturas
                     </h4>
                     <p className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                      Cola de Fondo Offline-First
+                      Importador sin errores y cola offline-first
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setMostrarSyncModal(true)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 hover:brightness-110 shadow-md shadow-emerald-500/20 cursor-pointer"
-                >
-                  Ver Hoja & Cola
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleOpenImportSheet('importar')}
+                    className="flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 hover:brightness-110 shadow-md shadow-emerald-500/20 cursor-pointer"
+                  >
+                    📥 Importar Sheet
+                  </button>
+                  <button
+                    onClick={() => handleOpenImportSheet('sheet')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
+                      isDark
+                        ? 'border-neutral-700 bg-neutral-800 text-neutral-300 hover:text-white'
+                        : 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    Ver Hoja
+                  </button>
+                </div>
               </div>
 
               <div
@@ -260,6 +292,7 @@ export default function App() {
           <SyncSheetModal
             gastos={gastos}
             config={config}
+            pestañaInicial={pestañaSyncModal}
             onClose={() => setMostrarSyncModal(false)}
             onSynced={recargarDatos}
           />

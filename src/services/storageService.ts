@@ -7,6 +7,7 @@ import {
   LISTA_CATEGORIAS_DEFAULT,
   CATEGORIAS_CONFIG_DEFAULT
 } from '../types/finance';
+import { normalizarCategoria } from './googleSheetsImportService';
 
 const STORAGE_KEY_GASTOS = 'aura_finances_gastos_v1';
 const STORAGE_KEY_CONFIG = 'aura_finances_config_v1';
@@ -23,7 +24,7 @@ const INITIAL_CONFIG: UsuarioConfig = {
   ultima_sincronizacion: new Date().toISOString(),
 };
 
-// Semilla inicial realista de gastos (Facturas)
+// Semilla inicial realista de facturas con las 23 categorías oficiales
 const SEED_GASTOS: Gasto[] = [
   {
     id: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
@@ -47,7 +48,7 @@ const SEED_GASTOS: Gasto[] = [
     hora: '14:20',
     ciudad: 'Bogotá',
     nit: '890.900.608-9',
-    categoria: 'Mercados',
+    categoria: 'Mercado',
     metodo_pago: 'Tarjeta Débito',
     total: 320500,
     observaciones: 'Mercado de la quincena víveres y aseo',
@@ -56,13 +57,28 @@ const SEED_GASTOS: Gasto[] = [
     actualizado_en: '2026-10-06T14:20:00',
   },
   {
+    id: 'b1a2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c99',
+    establecimiento: 'Oxxo Parque 93',
+    fecha: '2026-10-06',
+    hora: '17:10',
+    ciudad: 'Bogotá',
+    nit: '900.254.123-1',
+    categoria: 'Snacks',
+    metodo_pago: 'Efectivo',
+    total: 18500,
+    observaciones: 'Café americano y galletas de avena',
+    sincronizado: true,
+    creado_en: '2026-10-06T17:10:00',
+    actualizado_en: '2026-10-06T17:10:00',
+  },
+  {
     id: 'c2b3a4d5-e6f7-8a9b-0c1d-2e3f4a5b6c7d',
     establecimiento: 'Crepes & Waffles Zona T',
     fecha: '2026-10-05',
     hora: '19:30',
     ciudad: 'Bogotá',
     nit: '860.519.894-3',
-    categoria: 'Restaurante',
+    categoria: 'Restaurantes',
     metodo_pago: 'Tarjeta Débito',
     total: 89400,
     observaciones: 'Cena de celebración familiar',
@@ -234,7 +250,13 @@ export function obtenerGastos(): Gasto[] {
       return SEED_GASTOS;
     }
     const lista = JSON.parse(raw);
-    return Array.isArray(lista) ? lista : SEED_GASTOS;
+    if (!Array.isArray(lista)) return SEED_GASTOS;
+
+    // Normalizar categorías al vuelo para garantizar congruencia con las 23 categorías
+    return lista.map((g: Gasto) => ({
+      ...g,
+      categoria: normalizarCategoria(g.categoria),
+    }));
   } catch {
     return SEED_GASTOS;
   }
@@ -248,6 +270,7 @@ export function guardarGasto(nuevoGasto: Omit<Gasto, 'id' | 'sincronizado' | 'cr
 
   const gasto: Gasto = {
     ...nuevoGasto,
+    categoria: normalizarCategoria(nuevoGasto.categoria),
     id,
     sincronizado: config.modo === 'local',
     creado_en: timestamp,
@@ -268,6 +291,53 @@ export function eliminarGasto(id: string): void {
   const lista = obtenerGastos();
   const filtrada = lista.filter((g) => g.id !== id);
   localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(filtrada));
+}
+
+/**
+ * Importa facturas provenientes de Google Sheets (modo: 'reemplazar' o 'anexar')
+ */
+export function importarGastosDesdeGoogleSheets(
+  nuevosGastos: Gasto[],
+  modo: 'reemplazar' | 'anexar' = 'anexar'
+): { importados: number; totalGastos: number; totalMonto: number } {
+  const gastosLimpios = nuevosGastos.map((g) => ({
+    ...g,
+    categoria: normalizarCategoria(g.categoria),
+    sincronizado: true,
+  }));
+
+  let resultadoFinal: Gasto[] = [];
+  if (modo === 'reemplazar') {
+    resultadoFinal = gastosLimpios;
+  } else {
+    const existentes = obtenerGastos();
+    // Evitar duplicados idénticos si ya existían
+    const idsExistentes = new Set(existentes.map((e) => e.id));
+    const nuevosFiltrados = gastosLimpios.filter((g) => !idsExistentes.has(g.id));
+    resultadoFinal = [...nuevosFiltrados, ...existentes];
+  }
+
+  // Ordenar por fecha descendente
+  resultadoFinal.sort((a, b) => {
+    const compFecha = b.fecha.localeCompare(a.fecha);
+    if (compFecha !== 0) return compFecha;
+    return (b.hora || '00:00').localeCompare(a.hora || '00:00');
+  });
+
+  localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(resultadoFinal));
+
+  // Actualizar fecha de sincronización
+  guardarConfiguracion({
+    ultima_sincronizacion: new Date().toISOString(),
+  });
+
+  const totalMonto = resultadoFinal.reduce((sum, g) => sum + g.total, 0);
+
+  return {
+    importados: nuevosGastos.length,
+    totalGastos: resultadoFinal.length,
+    totalMonto,
+  };
 }
 
 export function encolarSync(gastoId: string, accion: 'CREATE' | 'UPDATE' | 'DELETE', payload: any): void {

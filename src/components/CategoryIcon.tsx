@@ -51,9 +51,11 @@ export const CategoryIcon: React.FC<CategoryIconProps> = ({
     switch (categoria) {
       case 'Caridad': return <HeartHandshake size={size} />;
       case 'Cumpleaños': return <Cake size={size} />;
+      case 'Crypto':
       case 'Cripto': return <Coins size={size} />;
       case 'Apuestas': return <Dices size={size} />;
       case 'Videojuegos': return <Gamepad2 size={size} />;
+      case 'Restaurantes':
       case 'Restaurante': return <Utensils size={size} />;
       case 'Transporte': return <Car size={size} />;
       case 'Vivienda': return <Home size={size} />;
@@ -68,8 +70,10 @@ export const CategoryIcon: React.FC<CategoryIconProps> = ({
       case 'Tecnología': return <Laptop size={size} />;
       case 'Ropa': return <Shirt size={size} />;
       case 'Multas': return <AlertTriangle size={size} />;
+      case 'Snacks':
       case 'Snack': return <Coffee size={size} />;
       case 'Gasolina': return <Fuel size={size} />;
+      case 'Mercado':
       case 'Mercados': return <ShoppingCart size={size} />;
       case 'Otros': return <MoreHorizontal size={size} />;
       default:

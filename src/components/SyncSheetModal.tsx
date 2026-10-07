@@ -1,14 +1,34 @@
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   FileSpreadsheet,
   Mail,
   RefreshCw,
   CheckCircle2,
-  X
+  AlertTriangle,
+  Upload,
+  Link as LinkIcon,
+  ClipboardPaste,
+  FileCheck,
+  X,
+  Sparkles,
+  Download,
+  Copy,
+  ChevronRight,
+  Database
 } from 'lucide-react';
-import { Gasto, UsuarioConfig } from '../types/finance';
-import { sincronizarTodoConGoogleSheets, formatearMoneda } from '../services/storageService';
+import { Gasto, UsuarioConfig, LISTA_CATEGORIAS_DEFAULT } from '../types/finance';
+import {
+  sincronizarTodoConGoogleSheets,
+  formatearMoneda,
+  importarGastosDesdeGoogleSheets
+} from '../services/storageService';
+import {
+  procesarImportacionGoogleSheets,
+  descargarGoogleSheetsCSV,
+  generarPlantillaGoogleSheets
+} from '../services/googleSheetsImportService';
+import { CategoryIcon } from './CategoryIcon';
 import { useTheme } from '../context/ThemeContext';
 
 interface SyncSheetModalProps {
@@ -16,6 +36,7 @@ interface SyncSheetModalProps {
   config: UsuarioConfig;
   onClose: () => void;
   onSynced: () => void;
+  pestañaInicial?: 'importar' | 'sheet' | 'email';
 }
 
 export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
@@ -23,11 +44,31 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
   config,
   onClose,
   onSynced,
+  pestañaInicial = 'importar',
 }) => {
   const { isDark } = useTheme();
+  const [pestaña, setPestaña] = useState<'importar' | 'sheet' | 'email'>(pestañaInicial);
   const [sincronizando, setSincronizando] = useState(false);
   const [mensajeExito, setMensajeExito] = useState('');
-  const [pestaña, setPestaña] = useState<'sheet' | 'email'>('sheet');
+
+  // Estados de importación
+  const [metodoImportacion, setMetodoImportacion] = useState<'pegar' | 'url' | 'archivo'>('pegar');
+  const [textoPegado, setTextoPegado] = useState('');
+  const [urlSheet, setUrlSheet] = useState(
+    config.google_sheets_id
+      ? `https://docs.google.com/spreadsheets/d/${config.google_sheets_id}/edit`
+      : ''
+  );
+  const [cargandoUrl, setCargandoUrl] = useState(false);
+  const [errorUrl, setErrorUrl] = useState('');
+  const [modoGuardado, setModoGuardado] = useState<'anexar' | 'reemplazar'>('anexar');
+  const [notificacionCopiado, setNotificacionCopiado] = useState(false);
+
+  // Parseo en tiempo real del texto ingresado
+  const resultadoParseo = useMemo(() => {
+    if (!textoPegado.trim()) return null;
+    return procesarImportacionGoogleSheets(textoPegado);
+  }, [textoPegado]);
 
   const pendientes = gastos.filter((g) => !g.sincronizado).length;
 
@@ -38,42 +79,128 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
       setSincronizando(false);
       setMensajeExito(res.resumen);
       onSynced();
-    }, 1000);
+    }, 800);
+  };
+
+  const handleCargarEjemploPlantilla = () => {
+    const ejemplo = generarPlantillaGoogleSheets();
+    setTextoPegado(ejemplo);
+    setMetodoImportacion('pegar');
+    setErrorUrl('');
+  };
+
+  const handleDescargarPlantilla = () => {
+    const csv = generarPlantillaGoogleSheets();
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'Plantilla_Google_Sheets_Facturas.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCopiarPlantilla = () => {
+    const csv = generarPlantillaGoogleSheets();
+    navigator.clipboard.writeText(csv);
+    setNotificacionCopiado(true);
+    setTimeout(() => setNotificacionCopiado(false), 2500);
+  };
+
+  const handleCargarUrl = async () => {
+    if (!urlSheet.trim()) {
+      setErrorUrl('Por favor introduce un enlace válido de Google Sheets.');
+      return;
+    }
+    setErrorUrl('');
+    setCargandoUrl(true);
+    const resp = await descargarGoogleSheetsCSV(urlSheet);
+    setCargandoUrl(false);
+
+    if (resp.exito && resp.contenido) {
+      setTextoPegado(resp.contenido);
+      setMetodoImportacion('pegar');
+      setMensajeExito('¡Datos descargados exitosamente desde tu enlace de Google Sheets!');
+    } else {
+      setErrorUrl(
+        resp.error ||
+          'No se pudo conectar directamente. Por favor copia las celdas en tu Google Sheet (Ctrl+C) y pégalas en la pestaña "Pegar Celdas Directas".'
+      );
+    }
+  };
+
+  const handleSubirArchivo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        setTextoPegado(content);
+        setMetodoImportacion('pegar');
+        setMensajeExito(`Archivo "${file.name}" cargado exitosamente.`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleEjecutarImportacion = () => {
+    if (!resultadoParseo || !resultadoParseo.exito || resultadoParseo.gastosImportados.length === 0) {
+      return;
+    }
+
+    const { importados, totalGastos } = importarGastosDesdeGoogleSheets(
+      resultadoParseo.gastosImportados,
+      modoGuardado
+    );
+
+    setMensajeExito(
+      `¡Éxito! Se importaron ${importados} facturas sin errores (${modoGuardado === 'reemplazar' ? 'reemplazando el historial anterior' : 'anexadas al historial'}). Total en app: ${totalGastos}.`
+    );
+    onSynced();
+
+    // Limpiar formulario y cambiar a vista de hoja
+    setTimeout(() => {
+      setPestaña('sheet');
+    }, 1200);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className={`w-full max-w-xl rounded-3xl p-5 shadow-2xl max-h-[90vh] flex flex-col overflow-hidden border ${
+        className={`w-full max-w-2xl rounded-3xl p-4 sm:p-5 shadow-2xl max-h-[92vh] flex flex-col overflow-hidden border transition-colors ${
           isDark
             ? 'bg-neutral-900 border-neutral-800 text-neutral-100'
             : 'bg-white border-slate-200 text-slate-900'
         }`}
       >
+        {/* Cabecera del Modal */}
         <div
           className={`flex items-center justify-between pb-3 border-b ${
             isDark ? 'border-neutral-800' : 'border-slate-200'
           }`}
         >
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600">
-              <RefreshCw size={20} />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-600">
+              <FileSpreadsheet size={22} />
             </div>
             <div>
-              <h3 className={`font-bold text-base ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Google Sheets & Resúmenes por Correo
+              <h3 className={`font-bold text-base flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                Importador & Sincronización Google Sheets
               </h3>
               <p className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                Sincronización en Segundo Plano • Worker Offline-First
+                Compatible con las 23 categorías oficiales • Sin errores de formato
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer ${
+            className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors ${
               isDark
                 ? 'bg-neutral-800 text-neutral-400 hover:text-white'
                 : 'bg-slate-100 text-slate-500 hover:text-slate-900'
@@ -83,37 +210,61 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
           </button>
         </div>
 
+        {/* Pestañas de Navegación del Modal */}
         <div
-          className={`py-3 px-4 my-3 rounded-2xl border flex items-center justify-between ${
-            isDark
-              ? 'bg-neutral-950/80 border-neutral-800'
-              : 'bg-slate-50 border-slate-200'
+          className={`flex items-center gap-1.5 my-3 p-1 rounded-2xl border text-xs font-semibold ${
+            isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-slate-100/80 border-slate-200'
           }`}
         >
-          <div>
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-semibold ${isDark ? 'text-neutral-300' : 'text-slate-600'}`}>
-                Modo Actual:
-              </span>
-              <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">
-                {config.modo === 'sincronizado' ? 'Sincronizado Activo' : 'Modo Local'}
-              </span>
-            </div>
-            <p className={`text-[11px] mt-0.5 ${isDark ? 'text-neutral-500' : 'text-slate-500'}`}>
-              Email vinculado:{' '}
-              <strong className={isDark ? 'text-neutral-300' : 'text-slate-800'}>
-                {config.email}
-              </strong>
-            </p>
-          </div>
+          <button
+            onClick={() => setPestaña('importar')}
+            className={`flex-1 py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              pestaña === 'importar'
+                ? isDark
+                  ? 'bg-emerald-500 text-neutral-950 font-bold shadow-md'
+                  : 'bg-white text-emerald-700 font-bold shadow-sm border border-slate-200'
+                : isDark
+                ? 'text-neutral-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Upload size={14} />
+            <span>Importar Hoja de Cálculo</span>
+            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-900 font-bold ml-1">
+              Google Sheet
+            </span>
+          </button>
 
           <button
-            onClick={handleSincronizarAhora}
-            disabled={sincronizando}
-            className="px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 hover:brightness-110 disabled:opacity-50 flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
+            onClick={() => setPestaña('sheet')}
+            className={`flex-1 py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              pestaña === 'sheet'
+                ? isDark
+                  ? 'bg-neutral-800 text-white font-bold border border-neutral-700'
+                  : 'bg-white text-slate-900 font-bold shadow-sm border border-slate-200'
+                : isDark
+                ? 'text-neutral-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
-            <RefreshCw size={14} className={sincronizando ? 'animate-spin' : ''} />
-            <span>{sincronizando ? 'Sincronizando...' : `Subir (${pendientes} pendientes)`}</span>
+            <Database size={14} />
+            <span>Ver Hoja ({gastos.length} Facturas)</span>
+          </button>
+
+          <button
+            onClick={() => setPestaña('email')}
+            className={`flex-1 py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              pestaña === 'email'
+                ? isDark
+                  ? 'bg-neutral-800 text-white font-bold border border-neutral-700'
+                  : 'bg-white text-slate-900 font-bold shadow-sm border border-slate-200'
+                : isDark
+                ? 'text-neutral-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Mail size={14} />
+            <span>Correo</span>
           </button>
         </div>
 
@@ -130,53 +281,435 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
           </div>
         )}
 
-        <div
-          className={`flex items-center gap-2 border-b pb-2 ${
-            isDark ? 'border-neutral-800' : 'border-slate-200'
-          }`}
-        >
-          <button
-            onClick={() => setPestaña('sheet')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-              pestaña === 'sheet'
-                ? isDark
-                  ? 'bg-neutral-800 text-white border border-neutral-700'
-                  : 'bg-slate-100 text-slate-900 border border-slate-300 font-bold'
-                : isDark
-                ? 'text-neutral-400 hover:text-white'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <FileSpreadsheet size={14} className="text-emerald-600" />
-            <span>Vista Hoja de Cálculo (Google Sheets)</span>
-          </button>
-          <button
-            onClick={() => setPestaña('email')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
-              pestaña === 'email'
-                ? isDark
-                  ? 'bg-neutral-800 text-white border border-neutral-700'
-                  : 'bg-slate-100 text-slate-900 border border-slate-300 font-bold'
-                : isDark
-                ? 'text-neutral-400 hover:text-white'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <Mail size={14} className="text-cyan-600" />
-            <span>Previsualización de Notificación Email</span>
-          </button>
-        </div>
+        {/* Contenido según pestaña */}
+        <div className="flex-1 overflow-y-auto pr-0.5 no-scrollbar space-y-3">
+          {pestaña === 'importar' && (
+            <div className="space-y-3.5">
+              {/* Selector de Método de Importación */}
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-semibold ${isDark ? 'text-neutral-300' : 'text-slate-700'}`}>
+                  Selecciona cómo quieres cargar tu Google Sheet:
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCargarEjemploPlantilla}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg border flex items-center gap-1 transition-colors cursor-pointer ${
+                      isDark
+                        ? 'border-neutral-700 bg-neutral-800 text-neutral-300 hover:text-white'
+                        : 'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                    title="Carga una hoja de ejemplo con las 23 categorías oficiales"
+                  >
+                    <Sparkles size={12} className="text-amber-500" />
+                    <span>Cargar Ejemplo</span>
+                  </button>
+                </div>
+              </div>
 
-        <div className="flex-1 overflow-y-auto py-3 no-scrollbar">
-          {pestaña === 'sheet' ? (
-            <div className="space-y-2">
+              {/* Pestañas de método: Pegar / Enlace URL / Archivo */}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => setMetodoImportacion('pegar')}
+                  className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                    metodoImportacion === 'pegar'
+                      ? isDark
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
+                        : 'bg-emerald-50/80 border-emerald-500 text-emerald-800'
+                      : isDark
+                      ? 'bg-neutral-950/60 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-xs">
+                    <ClipboardPaste size={14} />
+                    <span>Pegar Celdas</span>
+                  </div>
+                  <p className="text-[10px] mt-1 opacity-80">
+                    Ctrl+C en Google Sheets y pegar aquí (100% fiable)
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => setMetodoImportacion('url')}
+                  className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                    metodoImportacion === 'url'
+                      ? isDark
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
+                        : 'bg-emerald-50/80 border-emerald-500 text-emerald-800'
+                      : isDark
+                      ? 'bg-neutral-950/60 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-xs">
+                    <LinkIcon size={14} />
+                    <span>Enlace URL</span>
+                  </div>
+                  <p className="text-[10px] mt-1 opacity-80">
+                    Pega el enlace de tu Google Sheet
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => setMetodoImportacion('archivo')}
+                  className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                    metodoImportacion === 'archivo'
+                      ? isDark
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
+                        : 'bg-emerald-50/80 border-emerald-500 text-emerald-800'
+                      : isDark
+                      ? 'bg-neutral-950/60 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-bold text-xs">
+                    <Upload size={14} />
+                    <span>Subir Archivo</span>
+                  </div>
+                  <p className="text-[10px] mt-1 opacity-80">
+                    Archivo .csv descargado de Google Sheets
+                  </p>
+                </button>
+              </div>
+
+              {/* Vista Método: Pegar Celdas */}
+              {metodoImportacion === 'pegar' && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className={isDark ? 'text-neutral-400' : 'text-slate-600'}>
+                      Pega aquí tus datos copiados desde Google Sheets:
+                    </span>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const clipboardText = await navigator.clipboard.readText();
+                          if (clipboardText) {
+                            setTextoPegado(clipboardText);
+                          }
+                        } catch (e) {
+                          // Fallback si permisos de clipboard están restringidos
+                        }
+                      }}
+                      className={`text-[11px] font-semibold text-emerald-600 hover:underline flex items-center gap-1 cursor-pointer`}
+                    >
+                      <ClipboardPaste size={12} />
+                      <span>Pegar desde Portapapeles</span>
+                    </button>
+                  </div>
+
+                  <textarea
+                    rows={5}
+                    value={textoPegado}
+                    onChange={(e) => setTextoPegado(e.target.value)}
+                    placeholder="En tu Google Sheet: selecciona las celdas, presiona Ctrl+C y pégalas aquí con Ctrl+V...&#10;&#10;Ejemplo de columnas reconocidas automáticamente:&#10;Fecha | Hora | Establecimiento | NIT | Categoría | Método de Pago | Ciudad | Total | Observaciones"
+                    className={`w-full rounded-2xl p-3 text-xs font-mono border focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-colors ${
+                      isDark
+                        ? 'bg-neutral-950 border-neutral-800 text-neutral-200 placeholder-neutral-600'
+                        : 'bg-slate-50 border-slate-200 text-slate-800 placeholder-slate-400'
+                    }`}
+                  />
+                </div>
+              )}
+
+              {/* Vista Método: Enlace URL de Google Sheets */}
+              {metodoImportacion === 'url' && (
+                <div
+                  className={`p-3.5 rounded-2xl border space-y-3 ${
+                    isDark ? 'bg-neutral-950 border-neutral-800' : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <label className={`block text-xs font-semibold ${isDark ? 'text-neutral-300' : 'text-slate-700'}`}>
+                    Enlace de tu Google Sheet:
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={urlSheet}
+                      onChange={(e) => setUrlSheet(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5.../edit"
+                      className={`flex-1 px-3 py-2 text-xs rounded-xl border focus:outline-none focus:ring-2 focus:ring-emerald-500/50 ${
+                        isDark
+                          ? 'bg-neutral-900 border-neutral-700 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    />
+                    <button
+                      onClick={handleCargarUrl}
+                      disabled={cargandoUrl}
+                      className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-neutral-950 hover:brightness-110 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw size={14} className={cargandoUrl ? 'animate-spin' : ''} />
+                      <span>{cargandoUrl ? 'Descargando...' : 'Cargar'}</span>
+                    </button>
+                  </div>
+
+                  {errorUrl && (
+                    <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs flex items-start gap-2">
+                      <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p>{errorUrl}</p>
+                        <button
+                          onClick={() => setMetodoImportacion('pegar')}
+                          className="font-bold underline text-emerald-400 cursor-pointer block"
+                        >
+                          Haz clic aquí para usar "Pegar Celdas" (Copia con Ctrl+C y pega al instante sin compartir enlace).
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
+                    💡 Consejo: Para enlazar por URL, tu Google Sheet debe tener permisos de "Cualquier persona con el enlace puede ver". Si tu hoja es privada, usa la opción <strong>"Pegar Celdas Directas"</strong>.
+                  </p>
+                </div>
+              )}
+
+              {/* Vista Método: Archivo CSV / TSV */}
+              {metodoImportacion === 'archivo' && (
+                <div
+                  className={`p-6 rounded-2xl border-2 border-dashed text-center space-y-2 transition-colors ${
+                    isDark
+                      ? 'border-neutral-800 bg-neutral-950/60 hover:border-neutral-700'
+                      : 'border-slate-300 bg-slate-50 hover:border-slate-400'
+                  }`}
+                >
+                  <Upload size={28} className="mx-auto text-emerald-600" />
+                  <div className={`text-xs font-semibold ${isDark ? 'text-neutral-300' : 'text-slate-700'}`}>
+                    Arrastra o selecciona tu archivo exportado de Google Sheets
+                  </div>
+                  <p className={`text-[11px] ${isDark ? 'text-neutral-500' : 'text-slate-500'}`}>
+                    En Google Sheets: Archivo ➔ Descargar ➔ Valores separados por comas (.csv)
+                  </p>
+                  <label className="inline-block mt-2 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-neutral-950 hover:brightness-110 cursor-pointer">
+                    Seleccionar Archivo .csv
+                    <input
+                      type="file"
+                      accept=".csv,.tsv,.txt"
+                      onChange={handleSubirArchivo}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* Barra de Herramientas de Plantilla Oficial */}
+              <div
+                className={`flex items-center justify-between p-2.5 rounded-xl border text-[11px] ${
+                  isDark ? 'bg-neutral-950/40 border-neutral-800' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-emerald-600">Plantilla Oficial:</span>
+                  <span className={isDark ? 'text-neutral-400' : 'text-slate-600'}>
+                    Contiene las 23 categorías organizadas
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCopiarPlantilla}
+                    className={`px-2 py-1 rounded-lg border flex items-center gap-1 cursor-pointer transition-colors ${
+                      isDark
+                        ? 'border-neutral-700 bg-neutral-800 hover:text-white'
+                        : 'border-slate-300 bg-white hover:bg-slate-100'
+                    }`}
+                  >
+                    <Copy size={11} />
+                    <span>{notificacionCopiado ? '¡Copiado!' : 'Copiar Encabezados'}</span>
+                  </button>
+                  <button
+                    onClick={handleDescargarPlantilla}
+                    className={`px-2 py-1 rounded-lg border flex items-center gap-1 cursor-pointer transition-colors ${
+                      isDark
+                        ? 'border-neutral-700 bg-neutral-800 hover:text-white'
+                        : 'border-slate-300 bg-white hover:bg-slate-100'
+                    }`}
+                  >
+                    <Download size={11} />
+                    <span>Descargar .CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* PREVISUALIZACIÓN DE FACTURAS DETECTADAS */}
+              {resultadoParseo && (
+                <div
+                  className={`p-4 rounded-2xl border space-y-3 transition-all ${
+                    resultadoParseo.exito
+                      ? isDark
+                        ? 'bg-neutral-950 border-emerald-500/30'
+                        : 'bg-emerald-50/40 border-emerald-300'
+                      : isDark
+                      ? 'bg-neutral-950 border-red-500/30'
+                      : 'bg-red-50 border-red-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-600 flex items-center justify-center">
+                        <FileCheck size={16} />
+                      </div>
+                      <div>
+                        <h4 className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                          Previsualización de Importación
+                        </h4>
+                        <span className="text-[11px] text-emerald-600 font-semibold font-mono">
+                          {resultadoParseo.gastosImportados.length} facturas detectadas • Total:{' '}
+                          {formatearMoneda(resultadoParseo.totalMonto, config.moneda)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-xs">
+                      <span className={`text-[11px] mr-1 ${isDark ? 'text-neutral-400' : 'text-slate-600'}`}>
+                        Modo:
+                      </span>
+                      <button
+                        onClick={() => setModoGuardado('anexar')}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors ${
+                          modoGuardado === 'anexar'
+                            ? 'bg-emerald-500 text-neutral-950'
+                            : isDark
+                            ? 'bg-neutral-800 text-neutral-300'
+                            : 'bg-slate-200 text-slate-700'
+                        }`}
+                      >
+                        Anexar
+                      </button>
+                      <button
+                        onClick={() => setModoGuardado('reemplazar')}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors ${
+                          modoGuardado === 'reemplazar'
+                            ? 'bg-rose-500 text-white'
+                            : isDark
+                            ? 'bg-neutral-800 text-neutral-300'
+                            : 'bg-slate-200 text-slate-700'
+                        }`}
+                        title="Reemplaza todos los datos actuales y deja solo las facturas de la hoja importada"
+                      >
+                        Reemplazar Todo
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Resumen de Categorías detectadas (Chips) */}
+                  <div className="space-y-1">
+                    <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
+                      Distribución por Categorías Detectadas:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto no-scrollbar">
+                      {Object.entries(resultadoParseo.conteoPorCategoria)
+                        .filter(([_, count]) => count > 0)
+                        .map(([cat, count]) => (
+                          <span
+                            key={cat}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] border font-medium ${
+                              isDark
+                                ? 'bg-neutral-900 border-neutral-700 text-neutral-300'
+                                : 'bg-white border-slate-200 text-slate-800 shadow-xs'
+                            }`}
+                          >
+                            <CategoryIcon categoria={cat} size={11} />
+                            <span>{cat}</span>
+                            <strong className="text-emerald-600 font-mono">({count})</strong>
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* Tabla miniatura de las primeras 4 filas */}
+                  <div className="overflow-x-auto rounded-xl border max-h-36">
+                    <table className="w-full text-[11px] text-left border-collapse">
+                      <thead>
+                        <tr
+                          className={`font-mono border-b ${
+                            isDark ? 'bg-neutral-900 text-neutral-300 border-neutral-800' : 'bg-slate-100 text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          <th className="p-1.5 border-r border-inherit">Fecha</th>
+                          <th className="p-1.5 border-r border-inherit">Establecimiento</th>
+                          <th className="p-1.5 border-r border-inherit">Categoría</th>
+                          <th className="p-1.5 border-r border-inherit">Método</th>
+                          <th className="p-1.5 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className={isDark ? 'divide-y divide-neutral-800' : 'divide-y divide-slate-200'}>
+                        {resultadoParseo.gastosImportados.slice(0, 5).map((g) => (
+                          <tr key={g.id}>
+                            <td className="p-1.5 border-r border-inherit font-mono">{g.fecha}</td>
+                            <td className="p-1.5 border-r border-inherit font-medium truncate max-w-[140px]">
+                              {g.establecimiento}
+                            </td>
+                            <td className="p-1.5 border-r border-inherit text-emerald-600 font-semibold">
+                              {g.categoria}
+                            </td>
+                            <td className="p-1.5 border-r border-inherit">{g.metodo_pago}</td>
+                            <td className="p-1.5 text-right font-mono font-bold">
+                              {formatearMoneda(g.total, config.moneda)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Botón Principal de Confirmación */}
+                  <button
+                    onClick={handleEjecutarImportacion}
+                    className="w-full py-3 rounded-2xl text-xs font-extrabold bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 text-neutral-950 hover:brightness-110 shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all active:scale-[0.99] cursor-pointer"
+                  >
+                    <CheckCircle2 size={16} className="stroke-[3]" />
+                    <span>
+                      Confirmar e Importar {resultadoParseo.gastosImportados.length} Facturas a la App
+                    </span>
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Pestaña: Ver Hoja de Cálculo Sincronizada */}
+          {pestaña === 'sheet' && (
+            <div className="space-y-3">
+              <div
+                className={`py-3 px-4 rounded-2xl border flex items-center justify-between ${
+                  isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-semibold ${isDark ? 'text-neutral-300' : 'text-slate-600'}`}>
+                      Modo de Trabajo:
+                    </span>
+                    <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">
+                      {config.modo === 'sincronizado' ? 'Sincronizado Activo' : 'Modo Local'}
+                    </span>
+                  </div>
+                  <p className={`text-[11px] mt-0.5 ${isDark ? 'text-neutral-500' : 'text-slate-500'}`}>
+                    Email vinculado:{' '}
+                    <strong className={isDark ? 'text-neutral-300' : 'text-slate-800'}>
+                      {config.email}
+                    </strong>
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleSincronizarAhora}
+                  disabled={sincronizando}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 hover:brightness-110 disabled:opacity-50 flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
+                >
+                  <RefreshCw size={14} className={sincronizando ? 'animate-spin' : ''} />
+                  <span>{sincronizando ? 'Sincronizando...' : `Subir (${pendientes} pendientes)`}</span>
+                </button>
+              </div>
+
               <div
                 className={`flex items-center justify-between text-xs px-1 ${
                   isDark ? 'text-neutral-400' : 'text-slate-500'
                 }`}
               >
-                <span>Tabla de datos sincronizada: Gastos_Personales_2026</span>
-                <span className="font-mono text-emerald-600 font-semibold">{gastos.length} filas</span>
+                <span>Tabla de datos sincronizada: Facturas_Personales_2026</span>
+                <span className="font-mono text-emerald-600 font-semibold">{gastos.length} filas totales</span>
               </div>
 
               <div
@@ -184,13 +717,13 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                   isDark ? 'border-neutral-800 bg-neutral-950' : 'border-slate-200 bg-white shadow-xs'
                 }`}
               >
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto max-h-[46vh]">
                   <table className="w-full text-left border-collapse">
-                    <thead>
+                    <thead className="sticky top-0 z-10">
                       <tr
                         className={`font-mono text-[11px] border-b ${
                           isDark
-                            ? 'bg-neutral-800/80 text-neutral-300 border-neutral-700'
+                            ? 'bg-neutral-800 text-neutral-300 border-neutral-700'
                             : 'bg-slate-100 text-slate-700 border-slate-200'
                         }`}
                       >
@@ -209,21 +742,40 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                         isDark ? 'divide-neutral-800' : 'divide-slate-200'
                       }`}
                     >
-                      {gastos.slice(0, 7).map((g) => (
+                      {gastos.map((g) => (
                         <tr
                           key={g.id}
                           className={`transition-colors ${
                             isDark ? 'hover:bg-neutral-900/60' : 'hover:bg-slate-50'
                           }`}
                         >
-                          <td className={`p-2 border-r font-mono ${isDark ? 'border-neutral-800/80 text-neutral-400' : 'border-slate-200 text-slate-600'}`}>{g.fecha}</td>
-                          <td className={`p-2 border-r font-mono ${isDark ? 'border-neutral-800/80 text-neutral-400' : 'border-slate-200 text-slate-600'}`}>{g.hora}</td>
-                          <td className={`p-2 border-r font-medium ${isDark ? 'border-neutral-800/80 text-white' : 'border-slate-200 text-slate-900'}`}>{g.establecimiento}</td>
-                          <td className={`p-2 border-r font-mono ${isDark ? 'border-neutral-800/80 text-neutral-400' : 'border-slate-200 text-slate-600'}`}>{g.nit}</td>
-                          <td className={`p-2 border-r ${isDark ? 'border-neutral-800/80 text-emerald-400' : 'border-slate-200 text-emerald-700 font-medium'}`}>{g.categoria}</td>
-                          <td className={`p-2 border-r ${isDark ? 'border-neutral-800/80 text-neutral-300' : 'border-slate-200 text-slate-700'}`}>{g.metodo_pago}</td>
-                          <td className={`p-2 border-r ${isDark ? 'border-neutral-800/80 text-neutral-300' : 'border-slate-200 text-slate-700'}`}>{g.ciudad}</td>
-                          <td className={`p-2 text-right font-mono font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{formatearMoneda(g.total)}</td>
+                          <td className={`p-2 border-r font-mono ${isDark ? 'border-neutral-800/80 text-neutral-400' : 'border-slate-200 text-slate-600'}`}>
+                            {g.fecha}
+                          </td>
+                          <td className={`p-2 border-r font-mono ${isDark ? 'border-neutral-800/80 text-neutral-400' : 'border-slate-200 text-slate-600'}`}>
+                            {g.hora}
+                          </td>
+                          <td className={`p-2 border-r font-medium ${isDark ? 'border-neutral-800/80 text-white' : 'border-slate-200 text-slate-900'}`}>
+                            {g.establecimiento}
+                          </td>
+                          <td className={`p-2 border-r font-mono ${isDark ? 'border-neutral-800/80 text-neutral-400' : 'border-slate-200 text-slate-600'}`}>
+                            {g.nit}
+                          </td>
+                          <td className={`p-2 border-r ${isDark ? 'border-neutral-800/80 text-emerald-400' : 'border-slate-200 text-emerald-700 font-medium'}`}>
+                            <div className="flex items-center gap-1.5">
+                              <CategoryIcon categoria={g.categoria} size={13} />
+                              <span>{g.categoria}</span>
+                            </div>
+                          </td>
+                          <td className={`p-2 border-r ${isDark ? 'border-neutral-800/80 text-neutral-300' : 'border-slate-200 text-slate-700'}`}>
+                            {g.metodo_pago}
+                          </td>
+                          <td className={`p-2 border-r ${isDark ? 'border-neutral-800/80 text-neutral-300' : 'border-slate-200 text-slate-700'}`}>
+                            {g.ciudad}
+                          </td>
+                          <td className={`p-2 text-right font-mono font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                            {formatearMoneda(g.total, config.moneda)}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -231,12 +783,13 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                 </div>
               </div>
             </div>
-          ) : (
+          )}
+
+          {/* Pestaña: Notificaciones Email */}
+          {pestaña === 'email' && (
             <div
               className={`p-4 rounded-2xl border text-xs space-y-3 ${
-                isDark
-                  ? 'bg-neutral-950 border-neutral-800'
-                  : 'bg-slate-50 border-slate-200 shadow-xs'
+                isDark ? 'bg-neutral-950 border-neutral-800' : 'bg-slate-50 border-slate-200 shadow-xs'
               }`}
             >
               <div

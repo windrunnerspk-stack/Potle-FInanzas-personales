@@ -14,7 +14,8 @@ import {
   X,
   CreditCard,
   Building2,
-  Trash2
+  Trash2,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Gasto, CategoriaGasto, LISTA_CATEGORIAS } from '../types/finance';
 import { CategoryIcon } from './CategoryIcon';
@@ -26,12 +27,14 @@ interface ExpenseListProps {
   onOpenNewExpense: () => void;
   onRefresh: () => void;
   onSelectGasto?: (gasto: Gasto) => void;
+  onOpenImportSheet?: () => void;
 }
 
 export const ExpenseList: React.FC<ExpenseListProps> = ({
   gastos,
   onOpenNewExpense,
   onRefresh,
+  onOpenImportSheet,
 }) => {
   const { isDark } = useTheme();
   const [busqueda, setBusqueda] = useState('');
@@ -345,30 +348,48 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
 
       {/* 3. Barra de Búsqueda Interactiva & Filtros */}
       <div className="space-y-2.5">
-        <div className="relative">
-          <Search
-            size={18}
-            className={`absolute left-3.5 top-3.5 ${isDark ? 'text-neutral-400' : 'text-slate-400'}`}
-          />
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar por establecimiento (ej. 'Terpel'), NIT, ciudad..."
-            className={`w-full pl-10 pr-10 py-3 rounded-2xl border text-sm transition-colors focus:outline-none focus:border-emerald-500 ${
-              isDark
-                ? 'bg-neutral-900 border-neutral-800 text-white placeholder-neutral-500'
-                : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 shadow-xs'
-            }`}
-          />
-          {busqueda && (
-            <button
-              onClick={() => setBusqueda('')}
-              className={`absolute right-3.5 top-3.5 cursor-pointer ${
-                isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-400 hover:text-slate-800'
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search
+              size={18}
+              className={`absolute left-3.5 top-3.5 ${isDark ? 'text-neutral-400' : 'text-slate-400'}`}
+            />
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por comercio (ej. 'Terpel'), NIT, ciudad..."
+              className={`w-full pl-10 pr-10 py-3 rounded-2xl border text-sm transition-colors focus:outline-none focus:border-emerald-500 ${
+                isDark
+                  ? 'bg-neutral-900 border-neutral-800 text-white placeholder-neutral-500'
+                  : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 shadow-xs'
               }`}
+            />
+            {busqueda && (
+              <button
+                onClick={() => setBusqueda('')}
+                className={`absolute right-3.5 top-3.5 cursor-pointer ${
+                  isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-400 hover:text-slate-800'
+                }`}
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          {onOpenImportSheet && (
+            <button
+              onClick={onOpenImportSheet}
+              className={`px-3.5 py-3 rounded-2xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap active:scale-95 shrink-0 ${
+                isDark
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 shadow-xs'
+              }`}
+              title="Importar Facturas desde Google Sheets (URL, Pegar o Archivo)"
             >
-              <X size={16} />
+              <FileSpreadsheet size={16} className="text-emerald-600" />
+              <span className="hidden sm:inline">Importar Sheet</span>
+              <span className="sm:hidden text-[11px]">Sheet</span>
             </button>
           )}
         </div>
@@ -389,7 +410,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
           >
             Todas ({gastos.length})
           </button>
-          {['Gasolina', 'Mercados', 'Restaurante', 'Vivienda', 'Salud', 'Suscripciones'].map((cat) => (
+          {['Mercado', 'Gasolina', 'Snacks', 'Restaurantes', 'Vivienda', 'Servicios', 'Salud', 'Transporte', 'Suscripciones', 'Crypto'].map((cat) => (
             <button
               key={cat}
               onClick={() => setCategoriaFiltro(categoriaFiltro === cat ? 'TODAS' : cat)}

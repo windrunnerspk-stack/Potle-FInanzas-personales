@@ -38,11 +38,11 @@ interface ManualExpenseFormProps {
 const CIUDADES_FRECUENTES = ['Bogotá', 'Medellín', 'Cali', 'Barranquilla', 'Cartagena', 'Bucaramanga'];
 const ESTABLECIMIENTOS_FRECUENTES = [
   { nombre: 'Terpel', nit: '860.005.224-6', cat: 'Gasolina' as CategoriaGasto },
-  { nombre: 'Éxito', nit: '890.900.608-9', cat: 'Mercados' as CategoriaGasto },
-  { nombre: 'Crepes & Waffles', nit: '860.519.894-3', cat: 'Restaurante' as CategoriaGasto },
+  { nombre: 'Éxito', nit: '890.900.608-9', cat: 'Mercado' as CategoriaGasto },
+  { nombre: 'Crepes & Waffles', nit: '860.519.894-3', cat: 'Restaurantes' as CategoriaGasto },
   { nombre: 'Droguería Cruz Verde', nit: '800.149.695-1', cat: 'Salud' as CategoriaGasto },
   { nombre: 'Primax', nit: '860.002.554-4', cat: 'Gasolina' as CategoriaGasto },
-  { nombre: 'Oxxo', nit: '900.278.411-2', cat: 'Snack' as CategoriaGasto },
+  { nombre: 'Oxxo', nit: '900.278.411-2', cat: 'Snacks' as CategoriaGasto },
 ];
 
 export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
