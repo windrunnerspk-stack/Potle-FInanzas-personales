@@ -11,6 +11,7 @@ import {
   Moon
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { AuraLogo } from './AuraLogo';
 
 interface MobileFrameProps {
   children: React.ReactNode;
@@ -56,9 +57,7 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
       {/* Top Bar de Control del Simulador & Arquitectura */}
       <header className="w-full max-w-4xl flex flex-wrap items-center justify-between gap-3 mb-4 px-2">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-neutral-950 font-black shadow-lg shadow-emerald-500/20">
-            <span className="text-lg">⚡</span>
-          </div>
+          <AuraLogo size={42} withGlow={true} />
           <div>
             <h1
               className={`text-base sm:text-lg font-extrabold flex items-center gap-2 ${
@@ -202,9 +201,7 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
           }`}
         >
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 font-bold text-xs">
-              A
-            </div>
+            <AuraLogo size={28} withGlow={false} />
             <div>
               <h2
                 className={`text-xs sm:text-sm font-extrabold tracking-tight ${

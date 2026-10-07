@@ -42,27 +42,58 @@ jobs:
       - name: 🔑 Dar permisos de ejecución al ejecutable Gradle
         run: chmod +x android/gradlew
 
-      - name: 🔨 Compilar APK Debug (Listo para instalar en cualquier móvil Android)
+      - name: 🔨 Compilar APK Debug (Firmado y listo para instalar en cualquier teléfono)
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon
 
-      - name: 🚀 Compilar APK Release
+      - name: 🚀 Compilar APK Release (Firmado para distribución)
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon || echo "assembleRelease concluido (Debug APK generado con éxito)"
+          ./gradlew assembleRelease --no-daemon || echo "assembleRelease finalizado"
 
-      - name: 📦 Subir APK Debug como Artefacto Descargable
+      - name: 🏷️ Preparar APKs con nombres descriptivos
+        run: |
+          mkdir -p dist-apk
+          if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk dist-apk/AuraFinanzas-Debug.apk
+          fi
+          if [ -f "android/app/build/outputs/apk/release/app-release.apk" ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk dist-apk/AuraFinanzas-Release.apk
+          fi
+
+      - name: 📦 Subir APK Debug como Artefacto (Extraer el .zip para instalar)
         uses: actions/upload-artifact@v4
         with:
           name: aura-finanzas-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: dist-apk/AuraFinanzas-Debug.apk
           retention-days: 14
 
-      - name: 📦 Subir APK Release como Artefacto Descargable
+      - name: 📦 Subir APK Release como Artefacto (Extraer el .zip para instalar)
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: aura-finanzas-release-apk
-          path: android/app/build/outputs/apk/release/
+          path: dist-apk/AuraFinanzas-Release.apk
           retention-days: 14
+
+      - name: 🚀 Publicar en GitHub Releases (Descarga directa sin ZIP)
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        with:
+          tag_name: release-apk-latest
+          name: "Aura Finanzas v1.0 (APK Instalable Android)"
+          body: |
+            ### 📱 Aura Finanzas - Versión Android Oficial
+            Descarga directamente el archivo `.apk` a tu teléfono Android e instálalo.
+            
+            - **AuraFinanzas-Debug.apk**: Instalación directa recomendada para cualquier teléfono Android (sin restricciones).
+            - **AuraFinanzas-Release.apk**: Versión optimizada con firma de depuración.
+            
+            *Nota: Al instalar por primera vez, habilita "Permitir instalación desde esta fuente" en los Ajustes de Android.*
+          draft: false
+          prerelease: false
+          files: |
+            dist-apk/AuraFinanzas-Debug.apk
+            dist-apk/AuraFinanzas-Release.apk

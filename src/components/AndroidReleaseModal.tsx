@@ -18,11 +18,13 @@ import {
   HelpCircle,
   Play,
   ArrowRight,
-  ExternalLink
+  ExternalLink,
+  AlertTriangle
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { testConnection } from '../services/firebase';
 import { sincronizarConFirebase } from '../services/storageService';
+import { AuraLogo } from './AuraLogo';
 
 interface AndroidReleaseModalProps {
   onClose: () => void;
@@ -35,7 +37,7 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # Permite ejecutar manualmente con un clic en la pestaña Actions
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -72,30 +74,53 @@ jobs:
       - name: Dar permisos de ejecución a gradlew
         run: chmod +x android/gradlew
 
-      - name: Compilar APK Debug (Instalación directa en celular)
+      - name: Compilar APK Debug (Firmado para cualquier celular)
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon
 
-      - name: Compilar APK Release
+      - name: Compilar APK Release (Firmado para distribución)
         run: |
           cd android
           ./gradlew assembleRelease --no-daemon || echo "assembleRelease finalizado"
 
-      - name: Subir APK Debug como Artefacto Descargable
+      - name: Preparar APKs con nombres descriptivos
+        run: |
+          mkdir -p dist-apk
+          if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk dist-apk/AuraFinanzas-Debug.apk
+          fi
+          if [ -f "android/app/build/outputs/apk/release/app-release.apk" ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk dist-apk/AuraFinanzas-Release.apk
+          fi
+
+      - name: Subir APK Debug como Artefacto (Descomprimir .zip para instalar)
         uses: actions/upload-artifact@v4
         with:
           name: aura-finanzas-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: dist-apk/AuraFinanzas-Debug.apk
           retention-days: 14
 
-      - name: Subir APK Release como Artefacto Descargable
+      - name: Subir APK Release como Artefacto (Descomprimir .zip para instalar)
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: aura-finanzas-release-apk
-          path: android/app/build/outputs/apk/release/
-          retention-days: 14`;
+          path: dist-apk/AuraFinanzas-Release.apk
+          retention-days: 14
+
+      - name: Publicar en GitHub Releases (Descarga directa .apk sin ZIP)
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        with:
+          tag_name: release-apk-latest
+          name: "Aura Finanzas v1.0 (APK Instalable Android)"
+          draft: false
+          prerelease: false
+          files: |
+            dist-apk/AuraFinanzas-Debug.apk
+            dist-apk/AuraFinanzas-Release.apk`;
 
 export const AndroidReleaseModal: React.FC<AndroidReleaseModalProps> = ({ onClose }) => {
   const { isDark } = useTheme();
@@ -142,20 +167,18 @@ export const AndroidReleaseModal: React.FC<AndroidReleaseModalProps> = ({ onClos
         }`}
       >
         {/* Cabecera */}
-        <div className="p-5 border-b border-inherit flex items-center justify-between bg-gradient-to-r from-emerald-500/10 via-amber-500/10 to-transparent">
+        <div className="p-5 border-b border-inherit flex items-center justify-between bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-transparent">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-inner">
-              <Smartphone size={22} />
-            </div>
+            <AuraLogo size={44} withGlow={true} />
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-bold">Generador de APK Android & Firebase</h3>
+                <h3 className="text-base sm:text-lg font-bold">Aura Finanzas • APK Android & Firebase</h3>
                 <span className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  Ready
+                  v1.0 Ready
                 </span>
               </div>
               <p className={`text-xs ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                Compila en GitHub Actions sin instalar nada en tu PC o compila localmente con Gradle
+                Compilación automática en la nube de GitHub Actions o localmente con Gradle
               </p>
             </div>
           </div>
@@ -213,6 +236,28 @@ export const AndroidReleaseModal: React.FC<AndroidReleaseModalProps> = ({ onClos
         <div className="p-5 space-y-5 max-h-[72vh] overflow-y-auto">
           {tabActiva === 'github' && (
             <div className="space-y-4">
+              {/* ALERTA IMPORTANTE: Solución al error "La app no es válida" */}
+              <div className={`p-4 rounded-xl border ${isDark ? 'bg-amber-950/20 border-amber-500/40 text-amber-200' : 'bg-amber-50 border-amber-300 text-amber-900'}`}>
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+                    <AlertTriangle size={18} />
+                  </div>
+                  <div className="text-xs space-y-1.5">
+                    <h4 className="font-bold text-amber-400 text-sm">¿Te sale "El paquete no es válido" en tu celular?</h4>
+                    <p className={`leading-relaxed ${isDark ? 'text-neutral-200' : 'text-slate-700'}`}>
+                      <strong>Causa:</strong> Cuando descargas desde <em>Artifacts</em> en GitHub, el archivo se descarga como un <strong>.ZIP comprimido</strong> (ej: <code>aura-finanzas-debug-apk.zip</code>). Si lo tocas directamente, Android intenta abrirlo como instalador y dice que "no es válido".
+                    </p>
+                    <div className={`p-2.5 rounded-lg border font-medium text-[11px] space-y-1 ${isDark ? 'bg-black/30 border-amber-500/30' : 'bg-white/80 border-amber-200'}`}>
+                      <p className="font-bold text-emerald-400">✅ Cómo instalarlo en 1 minuto:</p>
+                      <p>1. Abre la aplicación <strong>"Mis Archivos"</strong> o <strong>"Files"</strong> en tu celular Android.</p>
+                      <p>2. Busca en Descargas el archivo <strong>.zip</strong> descargado y dale a <strong>"Extraer" o "Descomprimir"</strong>.</p>
+                      <p>3. Toca el archivo extraído que termina en <strong>.apk</strong> (ej: <code>AuraFinanzas-Debug.apk</code>) y pulsa <strong>Instalar</strong>.</p>
+                      <p className="text-[10px] opacity-80 pt-1">💡 <em>Ambas versiones (Debug y Release) ya cuentan con firma digital configurada para instalarse sin trabas.</em></p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Alerta explicativa de GitHub Actions */}
               <div className={`p-4 rounded-xl border ${isDark ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-emerald-50 border-emerald-200'}`}>
                 <div className="flex items-start gap-3">
@@ -269,9 +314,9 @@ export const AndroidReleaseModal: React.FC<AndroidReleaseModalProps> = ({ onClos
                   <div className={`p-3.5 rounded-xl border flex items-start gap-3 ${isDark ? 'bg-neutral-950/60 border-neutral-800' : 'bg-slate-50 border-slate-200'}`}>
                     <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center shrink-0">3</span>
                     <div className="space-y-1">
-                      <p className="font-semibold text-emerald-400">Descarga tu APK en "Artifacts":</p>
+                      <p className="font-semibold text-emerald-400">Descarga tu APK en "Artifacts" o "Releases":</p>
                       <p className={isDark ? 'text-neutral-400 text-[11px]' : 'text-slate-600 text-[11px]'}>
-                        Ve a la pestaña <strong>Actions</strong>. Verás una tarea llamada <strong>"Compilar APK Android"</strong> ejecutándose. Tardará entre 2 y 3 minutos. Cuando aparezca el icono verde (✓), haz clic sobre él, baja hasta la sección <strong>Artifacts</strong> y descarga <strong>aura-finanzas-debug-apk</strong> (se instala directo en cualquier celular).
+                        Ve a la pestaña <strong>Actions</strong>. Cuando la tarea termine en verde (✓), haz clic sobre ella, baja hasta <strong>Artifacts</strong> y descarga <strong>aura-finanzas-debug-apk</strong>. <em>Importante: En tu móvil, descomprime el archivo ZIP descargado y pulsa sobre <strong>AuraFinanzas-Debug.apk</strong> para instalar.</em>
                       </p>
                     </div>
                   </div>

@@ -4,6 +4,7 @@ import { Shield, Sparkles, HardDrive, RefreshCw, CheckCircle2, ArrowRight } from
 import { ModoOperacion, UsuarioConfig } from '../types/finance';
 import { guardarConfiguracion } from '../services/storageService';
 import { useTheme } from '../context/ThemeContext';
+import { AuraLogo } from './AuraLogo';
 
 interface OnboardingModalProps {
   config: UsuarioConfig;
@@ -47,9 +48,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ config, onComp
       >
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-neutral-950 font-black shadow-md">
-              ⚡
-            </div>
+            <AuraLogo size={44} withGlow={true} />
             <div>
               <h2 className={`text-xl font-bold tracking-tight flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 Aura Finance
