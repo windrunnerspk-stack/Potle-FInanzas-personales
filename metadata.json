@@ -1,0 +1,6 @@
+{
+  "name": "Aura Finance - Gastos & Scanner Offline",
+  "description": "App de control y gestión financiera offline-first con escáner OCR de facturas, análisis visual, calendario de gastos y sincronización con Google Sheets.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
