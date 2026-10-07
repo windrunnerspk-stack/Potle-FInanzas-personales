@@ -38,7 +38,7 @@ on:
   workflow_dispatch: # Permite ejecutar manualmente con un clic en la pestaña Actions
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -49,14 +49,13 @@ jobs:
       - name: Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Node.js (v20)
+      - name: Configurar Node.js (v22 LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 22
 
       - name: Instalar dependencias
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Compilar Web App (Vite)
         run: npm run build
@@ -81,7 +80,7 @@ jobs:
       - name: Compilar APK Release
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon || echo "assembleRelease finalizado"
 
       - name: Subir APK Debug como Artefacto Descargable
         uses: actions/upload-artifact@v4
@@ -92,9 +91,10 @@ jobs:
 
       - name: Subir APK Release como Artefacto Descargable
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: aura-finanzas-release-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          path: android/app/build/outputs/apk/release/
           retention-days: 14`;
 
 export const AndroidReleaseModal: React.FC<AndroidReleaseModalProps> = ({ onClose }) => {

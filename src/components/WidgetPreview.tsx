@@ -17,7 +17,6 @@ export const WidgetPreview: React.FC<WidgetPreviewProps> = ({
   onQuickScan,
 }) => {
   const { isDark } = useTheme();
-  const [plataforma, setPlataforma] = useState<'android' | 'ios'>('android');
 
   return (
     <div
@@ -29,47 +28,15 @@ export const WidgetPreview: React.FC<WidgetPreviewProps> = ({
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Smartphone size={18} className={isDark ? 'text-neutral-300' : 'text-slate-600'} />
+          <Smartphone size={18} className={isDark ? 'text-emerald-400' : 'text-emerald-600'} />
           <h4 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            Widgets de Pantalla de Inicio
+            Widgets Android (Material You)
           </h4>
         </div>
 
-        {/* Toggle Android vs iOS */}
-        <div
-          className={`flex items-center p-1 rounded-xl border text-xs ${
-            isDark ? 'bg-neutral-950 border-neutral-800' : 'bg-slate-100 border-slate-200'
-          }`}
-        >
-          <button
-            onClick={() => setPlataforma('android')}
-            className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-              plataforma === 'android'
-                ? isDark
-                  ? 'bg-neutral-200 text-neutral-950'
-                  : 'bg-white text-slate-900 shadow-xs'
-                : isDark
-                ? 'text-neutral-400 hover:text-white'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            Android (Material)
-          </button>
-          <button
-            onClick={() => setPlataforma('ios')}
-            className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-              plataforma === 'ios'
-                ? isDark
-                  ? 'bg-neutral-200 text-neutral-950'
-                  : 'bg-white text-slate-900 shadow-xs'
-                : isDark
-                ? 'text-neutral-400 hover:text-white'
-                : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            iOS (Stack)
-          </button>
-        </div>
+        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-bold">
+          Android Nativo
+        </span>
       </div>
 
       <p className={`text-xs leading-relaxed ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
@@ -154,10 +121,10 @@ export const WidgetPreview: React.FC<WidgetPreviewProps> = ({
           <div>
             <span
               className={`text-[10px] uppercase font-bold tracking-wider ${
-                isDark ? 'text-neutral-400' : 'text-slate-500'
+                isDark ? 'text-emerald-400' : 'text-emerald-600'
               }`}
             >
-              {plataforma === 'android' ? 'Atajos Android' : 'Acceso Directo iOS'}
+              Atajos Rápidos Android
             </span>
             <h5 className={`text-sm font-bold mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
               Registrar en 3 segundos

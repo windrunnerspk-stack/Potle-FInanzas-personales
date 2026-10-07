@@ -32,7 +32,7 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
   pendientesSync,
 }) => {
   const { isDark, toggleTheme } = useTheme();
-  const [plataforma, setPlataforma] = useState<'android' | 'ios' | 'fullscreen'>('android');
+  const [plataforma, setPlataforma] = useState<'android' | 'fullscreen'>('android');
   const [horaLocal, setHoraLocal] = useState('09:41');
 
   useEffect(() => {
@@ -114,7 +114,7 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
             <span className="hidden sm:inline">Código &</span> Esquema SQL
           </button>
 
-          {/* Selector de Marco Móvil */}
+          {/* Selector de Marco Móvil (Android nativo o Fullscreen) */}
           <div
             className={`flex items-center p-1 rounded-xl border text-xs shadow-xs ${
               isDark ? 'bg-neutral-900/90 border-neutral-800' : 'bg-white border-slate-200'
@@ -131,18 +131,6 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
               }`}
             >
               Android
-            </button>
-            <button
-              onClick={() => setPlataforma('ios')}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                plataforma === 'ios'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 shadow-sm'
-                  : isDark
-                  ? 'text-neutral-400 hover:text-white'
-                  : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              iOS
             </button>
             <button
               onClick={() => setPlataforma('fullscreen')}
@@ -188,23 +176,12 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
           >
             <span className="font-bold text-[12px]">{horaLocal}</span>
 
-            {/* Notch / Dynamic Island / Cámara perforada */}
-            {plataforma === 'ios' ? (
-              <div
-                className={`w-28 h-5 rounded-full border flex items-center justify-center gap-2 px-2 shadow-inner ${
-                  isDark ? 'bg-black border-neutral-800' : 'bg-slate-900 border-slate-800'
-                }`}
-              >
-                <span className="w-2.5 h-2.5 rounded-full bg-neutral-900 border border-neutral-700" />
-                <span className="w-2 h-2 rounded-full bg-emerald-500/80 animate-pulse" />
-              </div>
-            ) : (
-              <div
-                className={`w-3.5 h-3.5 rounded-full border shadow-inner ${
-                  isDark ? 'bg-neutral-900 border-neutral-700' : 'bg-slate-400/80 border-slate-300'
-                }`}
-              />
-            )}
+            {/* Cámara frontal Android (Punch Hole) */}
+            <div
+              className={`w-3.5 h-3.5 rounded-full border shadow-inner ${
+                isDark ? 'bg-neutral-900 border-neutral-700' : 'bg-slate-400/80 border-slate-300'
+              }`}
+            />
 
             <div className={`flex items-center gap-2 text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
               <span className={`text-[10px] font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>

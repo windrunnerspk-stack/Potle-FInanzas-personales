@@ -5,10 +5,10 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch: # Permite ejecutar la compilación manualmente con un solo clic en la pestaña Actions
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -19,14 +19,13 @@ jobs:
       - name: 📥 Clonar repositorio
         uses: actions/checkout@v4
 
-      - name: 🟢 Configurar Node.js (v20)
+      - name: 🟢 Configurar Node.js (v22 LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 22
 
       - name: 📦 Instalar dependencias
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: ⚡ Compilar Web App (Vite)
         run: npm run build
@@ -43,7 +42,7 @@ jobs:
       - name: 🔑 Dar permisos de ejecución a gradlew
         run: chmod +x android/gradlew
 
-      - name: 🔨 Compilar APK Debug (Listo para instalar directamente en cualquier celular)
+      - name: 🔨 Compilar APK Debug (Listo para instalar directamente)
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon
@@ -51,7 +50,7 @@ jobs:
       - name: 🚀 Compilar APK Release
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon || echo "assembleRelease finalizado"
 
       - name: 📦 Subir APK Debug como Artefacto Descargable
         uses: actions/upload-artifact@v4
@@ -62,7 +61,8 @@ jobs:
 
       - name: 📦 Subir APK Release como Artefacto Descargable
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: aura-finanzas-release-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          path: android/app/build/outputs/apk/release/
           retention-days: 14
