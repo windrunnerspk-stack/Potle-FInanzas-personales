@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Sun, Moon, RotateCcw } from 'lucide-react';
+import { Plus, Settings } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { AuraLogo } from './AuraLogo';
 
@@ -9,7 +9,7 @@ interface MobileFrameProps {
   onTabChange: (tab: 'gastos' | 'calendar' | 'analytics' | 'sync' | 'widgets') => void;
   onOpenScanner: () => void;
   onOpenNewExpense: () => void;
-  onOpenReset?: () => void;
+  onOpenSettings: () => void;
   pendientesSync: number;
 }
 
@@ -19,10 +19,10 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
   onTabChange,
   onOpenScanner,
   onOpenNewExpense,
-  onOpenReset,
+  onOpenSettings,
   pendientesSync,
 }) => {
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark } = useTheme();
 
   return (
     <div
@@ -30,11 +30,11 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
         isDark ? 'bg-[#090d16] text-neutral-100' : 'bg-slate-50 text-slate-800'
       }`}
     >
-      {/* Barra superior de la aplicación (Header limpio nativo) */}
+      {/* Barra superior de la aplicación (Header limpio oficial) */}
       <header
-        className={`sticky top-0 z-30 w-full px-4 py-3.5 flex items-center justify-between border-b backdrop-blur-xl transition-colors ${
+        className={`sticky top-0 z-30 w-full px-4 py-3 flex items-center justify-between border-b backdrop-blur-xl transition-colors ${
           isDark
-            ? 'bg-[#090d16]/90 border-white/10'
+            ? 'bg-[#090d16]/95 border-white/10'
             : 'bg-white/95 border-slate-200/90 shadow-xs'
         }`}
       >
@@ -58,37 +58,8 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
           </div>
         </div>
 
-        {/* Acciones principales de cabecera */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Botón para reiniciar a 0 si el usuario lo desea */}
-          {onOpenReset && (
-            <button
-              onClick={onOpenReset}
-              className={`p-2 rounded-xl border text-xs font-semibold flex items-center gap-1 transition-all active:scale-95 cursor-pointer ${
-                isDark
-                  ? 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:text-rose-400 hover:border-rose-500/30'
-                  : 'bg-white border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-200 shadow-2xs'
-              }`}
-              title="Reiniciar datos a 0"
-            >
-              <RotateCcw size={15} />
-              <span className="hidden sm:inline text-[11px]">Reiniciar</span>
-            </button>
-          )}
-
-          {/* Alternar tema */}
-          <button
-            onClick={toggleTheme}
-            className={`p-2 rounded-xl border text-xs font-semibold flex items-center transition-all active:scale-95 cursor-pointer ${
-              isDark
-                ? 'bg-neutral-900/80 border-neutral-800 text-amber-300 hover:bg-neutral-800'
-                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100 shadow-2xs'
-            }`}
-            title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-          >
-            {isDark ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-
+        {/* Acciones principales de cabecera: Botón Gasto y la Tuerca de Ajustes */}
+        <div className="flex items-center gap-2">
           {/* Botón Nuevo Gasto */}
           <button
             onClick={onOpenNewExpense}
@@ -97,10 +68,24 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
             <Plus size={15} className="stroke-[3]" />
             <span>Gasto</span>
           </button>
+
+          {/* Tuerca de Ajustes & Opciones (Settings) */}
+          <button
+            onClick={onOpenSettings}
+            className={`p-2 rounded-xl border text-xs font-semibold flex items-center transition-all active:scale-95 cursor-pointer ${
+              isDark
+                ? 'bg-neutral-900/90 border-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-800'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100 shadow-2xs'
+            }`}
+            title="Ajustes y opciones de la app"
+            aria-label="Ajustes"
+          >
+            <Settings size={18} />
+          </button>
         </div>
       </header>
 
-      {/* Contenedor principal que se adapta al 100% de la pantalla del celular */}
+      {/* Contenedor principal que se acopla al 100% de la pantalla del celular sin marcos falsos */}
       <main className="flex-1 w-full max-w-2xl mx-auto px-3.5 sm:px-6 pt-3 pb-24">
         {children}
       </main>
@@ -229,7 +214,7 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
             <span className="text-[11px]">Gráficos</span>
           </button>
 
-          {/* Tab 4: Sync & Configuración */}
+          {/* Tab 4: Sync & Hojas de Cálculo */}
           <button
             onClick={() => onTabChange('sync')}
             className={`flex flex-col items-center gap-1 transition-all cursor-pointer relative ${

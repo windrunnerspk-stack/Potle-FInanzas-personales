@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { Plus, RotateCcw, Settings } from 'lucide-react';
 import { Gasto, UsuarioConfig } from './types/finance';
 import {
   obtenerGastos,
@@ -18,9 +17,7 @@ import { AnalyticsCharts } from './components/AnalyticsCharts';
 import { ManualExpenseForm } from './components/ManualExpenseForm';
 import { ReceiptScanner } from './components/ReceiptScanner';
 import { SyncSheetModal } from './components/SyncSheetModal';
-import { WidgetPreview } from './components/WidgetPreview';
-import { OnboardingModal } from './components/OnboardingModal';
-import { ResetModal } from './components/ResetModal';
+import { SettingsModal } from './components/SettingsModal';
 import { useTheme } from './context/ThemeContext';
 
 export default function App() {
@@ -30,13 +27,12 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'gastos' | 'calendar' | 'analytics' | 'sync' | 'widgets'>('gastos');
 
   // Modales
-  const [mostrarOnboarding, setMostrarOnboarding] = useState(false);
+  const [mostrarSettings, setMostrarSettings] = useState(false);
   const [mostrarFormGasto, setMostrarFormGasto] = useState(false);
   const [valoresInicialesForm, setValoresInicialesForm] = useState<Partial<Gasto> | undefined>(undefined);
   const [mostrarScanner, setMostrarScanner] = useState(false);
   const [mostrarSyncModal, setMostrarSyncModal] = useState(false);
   const [pestañaSyncModal, setPestañaSyncModal] = useState<'importar' | 'sheet' | 'email'>('importar');
-  const [mostrarResetModal, setMostrarResetModal] = useState(false);
 
   const handleOpenImportSheet = (tab: 'importar' | 'sheet' | 'email' = 'importar') => {
     setPestañaSyncModal(tab);
@@ -75,14 +71,6 @@ export default function App() {
 
   const pendientesSync = gastos.filter((g) => !g.sincronizado).length;
 
-  const totalMes = gastos
-    .filter((g) => g.fecha.startsWith('2026-10'))
-    .reduce((acc, curr) => acc + curr.total, 0);
-
-  const totalAnio = gastos
-    .filter((g) => g.fecha.startsWith('2026'))
-    .reduce((acc, curr) => acc + curr.total, 0);
-
   return (
     <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'bg-[#090d16]' : 'bg-slate-50'}`}>
       <MobileFrame
@@ -90,40 +78,26 @@ export default function App() {
         onTabChange={setActiveTab}
         onOpenScanner={() => setMostrarScanner(true)}
         onOpenNewExpense={() => handleOpenNewExpense()}
-        onOpenReset={() => setMostrarResetModal(true)}
+        onOpenSettings={() => setMostrarSettings(true)}
         pendientesSync={pendientesSync}
       >
-        {/* Barra sutil de estado y acciones */}
+        {/* Barra sutil de estado y acceso a la tuerca */}
         <div className="mb-3 flex items-center justify-between text-xs px-1">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-              {gastos.length === 0 ? 'Sin facturas aún' : `${gastos.length} comprobantes`}
+              {gastos.length === 0 ? 'Sin facturas aún (Listo para registrar)' : `${gastos.length} comprobantes`}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setMostrarResetModal(true)}
-              className={`text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer ${
-                isDark ? 'text-neutral-400 hover:text-rose-400' : 'text-slate-500 hover:text-rose-600'
-              }`}
-              title="Borrar datos y empezar de cero"
-            >
-              <RotateCcw size={12} />
-              <span>Empezar a 0</span>
-            </button>
-            <span className={isDark ? 'text-neutral-700' : 'text-slate-300'}>•</span>
-            <button
-              onClick={() => setMostrarOnboarding(true)}
-              className={`text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer ${
-                isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              <Settings size={12} />
-              <span>Ajustes</span>
-            </button>
-          </div>
+          <button
+            onClick={() => setMostrarSettings(true)}
+            className={`text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer ${
+              isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <span>Ajustes & Opciones</span>
+          </button>
         </div>
 
         {/* Tab 1: Mis Gastos & Facturas */}
@@ -146,7 +120,7 @@ export default function App() {
           <AnalyticsCharts gastos={gastos} />
         )}
 
-        {/* Tab 4: Sync con Google Sheets & Widgets */}
+        {/* Tab 4: Sync con Google Sheets */}
         {activeTab === 'sync' && (
           <div className="space-y-4 pb-20">
             {/* Tarjeta de Sincronización Google Sheets */}
@@ -159,99 +133,43 @@ export default function App() {
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                 <div>
-                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    Sincronización de Facturas
-                  </h4>
-                  <p className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                    Respaldo en Google Sheets y Firestore
+                  <h3 className="font-bold text-sm flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    Google Sheets & Nube
+                  </h3>
+                  <p className={`text-xs ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
+                    {pendientesSync > 0
+                      ? `${pendientesSync} cambios pendientes de subida`
+                      : 'Todos tus comprobantes están sincronizados'}
                   </p>
                 </div>
+
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleOpenImportSheet('importar')}
-                    className="flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 hover:brightness-110 shadow-md shadow-emerald-500/20 cursor-pointer"
+                    onClick={() => handleOpenImportSheet('sheet')}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-500 text-neutral-950 font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
                   >
-                    📥 Importar Sheet
+                    <span>Abrir Configuración</span>
                   </button>
                 </div>
               </div>
-
-              <div
-                className={`p-3 rounded-2xl border text-xs space-y-1.5 ${
-                  isDark
-                    ? 'bg-neutral-950/80 border-neutral-800'
-                    : 'bg-slate-50 border-slate-200'
-                }`}
-              >
-                <div className="flex justify-between">
-                  <span className={isDark ? 'text-neutral-400' : 'text-slate-500'}>
-                    Facturas registradas:
-                  </span>
-                  <span className={`font-mono font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    {gastos.length}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className={isDark ? 'text-neutral-400' : 'text-slate-500'}>
-                    Email de cuenta:
-                  </span>
-                  <span className={`truncate max-w-[180px] ${isDark ? 'text-neutral-300' : 'text-slate-800'}`}>
-                    {config.email}
-                  </span>
-                </div>
-              </div>
             </div>
-
-            {/* Widgets de Pantalla de Inicio */}
-            <WidgetPreview
-              totalMes={totalMes}
-              totalAnio={totalAnio}
-              onQuickAdd={() => handleOpenNewExpense()}
-              onQuickScan={() => setMostrarScanner(true)}
-            />
-          </div>
-        )}
-
-        {/* Floating Quick Add Button */}
-        {activeTab === 'gastos' && (
-          <div className="fixed bottom-20 right-4 sm:right-8 z-30">
-            <button
-              onClick={() => handleOpenNewExpense()}
-              className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 text-neutral-950 font-bold shadow-xl shadow-emerald-500/30 flex items-center gap-2 active:scale-95 transition-all cursor-pointer"
-              title="Registrar Gasto Manual"
-            >
-              <Plus size={20} className="stroke-[3]" />
-              <span className="text-xs font-extrabold pr-1">Nuevo Gasto</span>
-            </button>
           </div>
         )}
       </MobileFrame>
 
-      {/* Modales Interactivos de la aplicación */}
+      {/* Modales */}
       <AnimatePresence>
-        {mostrarOnboarding && (
-          <OnboardingModal
+        {mostrarSettings && (
+          <SettingsModal
             config={config}
-            onComplete={(updated) => {
-              setConfig(updated);
-              setMostrarOnboarding(false);
-              recargarDatos();
-            }}
+            onClose={() => setMostrarSettings(false)}
+            onConfigUpdated={(nuevaConf) => setConfig(nuevaConf)}
+            onDataReset={recargarDatos}
+            onOpenSyncSheets={() => handleOpenImportSheet('sheet')}
           />
         )}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {mostrarResetModal && (
-          <ResetModal
-            isOpen={mostrarResetModal}
-            onClose={() => setMostrarResetModal(false)}
-            onResetCompletado={recargarDatos}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
         {mostrarFormGasto && (
           <ManualExpenseForm
             initialValues={valoresInicialesForm}
@@ -262,25 +180,21 @@ export default function App() {
             onSaved={handleExpenseSaved}
           />
         )}
-      </AnimatePresence>
 
-      <AnimatePresence>
         {mostrarScanner && (
           <ReceiptScanner
-            onScanComplete={handleScanComplete}
             onCancel={() => setMostrarScanner(false)}
+            onScanComplete={handleScanComplete}
           />
         )}
-      </AnimatePresence>
 
-      <AnimatePresence>
         {mostrarSyncModal && (
           <SyncSheetModal
             gastos={gastos}
             config={config}
             pestañaInicial={pestañaSyncModal}
             onClose={() => setMostrarSyncModal(false)}
-            onSynced={recargarDatos}
+            onSynced={() => recargarDatos()}
           />
         )}
       </AnimatePresence>
