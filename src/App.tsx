@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { Plus, FileSpreadsheet, Smartphone } from 'lucide-react';
+import { Plus, RotateCcw, Settings } from 'lucide-react';
 import { Gasto, UsuarioConfig } from './types/finance';
 import {
   obtenerGastos,
@@ -20,8 +20,7 @@ import { ReceiptScanner } from './components/ReceiptScanner';
 import { SyncSheetModal } from './components/SyncSheetModal';
 import { WidgetPreview } from './components/WidgetPreview';
 import { OnboardingModal } from './components/OnboardingModal';
-import { DevArchitectureModal } from './components/DevArchitectureModal';
-import { AndroidReleaseModal } from './components/AndroidReleaseModal';
+import { ResetModal } from './components/ResetModal';
 import { useTheme } from './context/ThemeContext';
 
 export default function App() {
@@ -37,8 +36,7 @@ export default function App() {
   const [mostrarScanner, setMostrarScanner] = useState(false);
   const [mostrarSyncModal, setMostrarSyncModal] = useState(false);
   const [pestañaSyncModal, setPestañaSyncModal] = useState<'importar' | 'sheet' | 'email'>('importar');
-  const [mostrarDevHub, setMostrarDevHub] = useState(false);
-  const [mostrarAndroidModal, setMostrarAndroidModal] = useState(false);
+  const [mostrarResetModal, setMostrarResetModal] = useState(false);
 
   const handleOpenImportSheet = (tab: 'importar' | 'sheet' | 'email' = 'importar') => {
     setPestañaSyncModal(tab);
@@ -50,9 +48,6 @@ export default function App() {
     recargarDatos();
     const conf = obtenerConfiguracion();
     setConfig(conf);
-    if (!conf.onboarding_completado) {
-      setMostrarOnboarding(true);
-    }
   }, []);
 
   const recargarDatos = () => {
@@ -89,52 +84,44 @@ export default function App() {
     .reduce((acc, curr) => acc + curr.total, 0);
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'bg-[#07090e]' : 'bg-[#eef2f6]'}`}>
+    <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'bg-[#090d16]' : 'bg-slate-50'}`}>
       <MobileFrame
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onOpenScanner={() => setMostrarScanner(true)}
-        onOpenDevHub={() => setMostrarDevHub(true)}
         onOpenNewExpense={() => handleOpenNewExpense()}
+        onOpenReset={() => setMostrarResetModal(true)}
         pendientesSync={pendientesSync}
       >
-        {/* Banner Superior de Estado de Sincronización y Configuración */}
-        <div className="mb-3.5 flex items-center justify-between text-xs px-1">
+        {/* Barra sutil de estado y acciones */}
+        <div className="mb-3 flex items-center justify-between text-xs px-1">
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>Modo:</span>
-            <span className={`font-semibold capitalize text-[11px] ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
-              {config.modo === 'sincronizado' ? 'Google Sheets Sync' : 'Local SQLite'}
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
+              {gastos.length === 0 ? 'Sin facturas aún' : `${gastos.length} comprobantes`}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setMostrarAndroidModal(true)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 transition-all cursor-pointer shadow-sm"
-              title="Android Release APK y Firebase Activo"
-            >
-              <Smartphone size={11} />
-              <span>Android APK</span>
-            </button>
-            <button
-              onClick={() => handleOpenImportSheet('importar')}
-              className={`text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ${
-                isDark ? 'text-emerald-400 hover:text-emerald-300' : 'text-emerald-700 hover:text-emerald-800'
+              onClick={() => setMostrarResetModal(true)}
+              className={`text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer ${
+                isDark ? 'text-neutral-400 hover:text-rose-400' : 'text-slate-500 hover:text-rose-600'
               }`}
-              title="Importar hoja de cálculo de Google Sheets"
+              title="Borrar datos y empezar de cero"
             >
-              <FileSpreadsheet size={13} />
-              <span>Importar Sheet</span>
+              <RotateCcw size={12} />
+              <span>Empezar a 0</span>
             </button>
             <span className={isDark ? 'text-neutral-700' : 'text-slate-300'}>•</span>
             <button
               onClick={() => setMostrarOnboarding(true)}
-              className={`text-[11px] transition-colors cursor-pointer ${
-                isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-500 hover:text-slate-900 font-medium'
+              className={`text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer ${
+                isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              Ajustes
+              <Settings size={12} />
+              <span>Ajustes</span>
             </button>
           </div>
         </div>
@@ -171,18 +158,13 @@ export default function App() {
               }`}
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                    <FileSpreadsheet size={18} />
-                  </div>
-                  <div>
-                    <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      Google Sheets & Facturas
-                    </h4>
-                    <p className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                      Importador sin errores y cola offline-first
-                    </p>
-                  </div>
+                <div>
+                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    Sincronización de Facturas
+                  </h4>
+                  <p className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
+                    Respaldo en Google Sheets y Firestore
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -190,16 +172,6 @@ export default function App() {
                     className="flex-1 sm:flex-none px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 hover:brightness-110 shadow-md shadow-emerald-500/20 cursor-pointer"
                   >
                     📥 Importar Sheet
-                  </button>
-                  <button
-                    onClick={() => handleOpenImportSheet('sheet')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
-                      isDark
-                        ? 'border-neutral-700 bg-neutral-800 text-neutral-300 hover:text-white'
-                        : 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    Ver Hoja
                   </button>
                 </div>
               </div>
@@ -213,13 +185,7 @@ export default function App() {
               >
                 <div className="flex justify-between">
                   <span className={isDark ? 'text-neutral-400' : 'text-slate-500'}>
-                    Facturas pendientes:
-                  </span>
-                  <span className="font-mono font-bold text-amber-500">{pendientesSync}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className={isDark ? 'text-neutral-400' : 'text-slate-500'}>
-                    Total en SQLite:
+                    Facturas registradas:
                   </span>
                   <span className={`font-mono font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {gastos.length}
@@ -227,7 +193,7 @@ export default function App() {
                 </div>
                 <div className="flex justify-between">
                   <span className={isDark ? 'text-neutral-400' : 'text-slate-500'}>
-                    Email de destino:
+                    Email de cuenta:
                   </span>
                   <span className={`truncate max-w-[180px] ${isDark ? 'text-neutral-300' : 'text-slate-800'}`}>
                     {config.email}
@@ -248,7 +214,7 @@ export default function App() {
 
         {/* Floating Quick Add Button */}
         {activeTab === 'gastos' && (
-          <div className="fixed sm:absolute bottom-20 right-6 sm:right-6 z-20">
+          <div className="fixed bottom-20 right-4 sm:right-8 z-30">
             <button
               onClick={() => handleOpenNewExpense()}
               className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 text-neutral-950 font-bold shadow-xl shadow-emerald-500/30 flex items-center gap-2 active:scale-95 transition-all cursor-pointer"
@@ -261,7 +227,7 @@ export default function App() {
         )}
       </MobileFrame>
 
-      {/* Modales Interactivos */}
+      {/* Modales Interactivos de la aplicación */}
       <AnimatePresence>
         {mostrarOnboarding && (
           <OnboardingModal
@@ -271,6 +237,16 @@ export default function App() {
               setMostrarOnboarding(false);
               recargarDatos();
             }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {mostrarResetModal && (
+          <ResetModal
+            isOpen={mostrarResetModal}
+            onClose={() => setMostrarResetModal(false)}
+            onResetCompletado={recargarDatos}
           />
         )}
       </AnimatePresence>
@@ -306,18 +282,6 @@ export default function App() {
             onClose={() => setMostrarSyncModal(false)}
             onSynced={recargarDatos}
           />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {mostrarDevHub && (
-          <DevArchitectureModal onClose={() => setMostrarDevHub(false)} />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {mostrarAndroidModal && (
-          <AndroidReleaseModal onClose={() => setMostrarAndroidModal(false)} />
         )}
       </AnimatePresence>
     </div>

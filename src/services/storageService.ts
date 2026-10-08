@@ -354,6 +354,14 @@ export function importarGastosDesdeGoogleSheets(
   };
 }
 
+export function reiniciarDatosACero(): void {
+  localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify([]));
+  localStorage.removeItem(STORAGE_KEY_QUEUE);
+  guardarConfiguracion({
+    ultima_sincronizacion: new Date().toISOString(),
+  });
+}
+
 export function encolarSync(gastoId: string, accion: 'CREATE' | 'UPDATE' | 'DELETE', payload: any): void {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_QUEUE);
