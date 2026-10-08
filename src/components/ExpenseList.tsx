@@ -15,33 +15,69 @@ import {
   CreditCard,
   Building2,
   Trash2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  FileDown,
+  AlertTriangle,
+  Pencil,
+  ChevronLeft,
+  Crown,
+  Lock,
+  History,
+  ShieldCheck
 } from 'lucide-react';
-import { Gasto, CategoriaGasto, LISTA_CATEGORIAS } from '../types/finance';
+import { Gasto, CategoriaGasto, LISTA_CATEGORIAS, UsuarioConfig } from '../types/finance';
 import { CategoryIcon } from './CategoryIcon';
-import { formatearMoneda, eliminarGasto } from '../services/storageService';
+import {
+  formatearMoneda,
+  eliminarGasto,
+  descargarGastosCSV,
+  limpiarGastosCorruptos,
+  esUsuarioAdmin
+} from '../services/storageService';
 import { useTheme } from '../context/ThemeContext';
 
 interface ExpenseListProps {
   gastos: Gasto[];
-  onOpenNewExpense: () => void;
+  config?: UsuarioConfig;
+  onOpenNewExpense: (prefill?: Partial<Gasto>) => void;
+  onEditGasto?: (gasto: Gasto) => void;
   onRefresh: () => void;
   onSelectGasto?: (gasto: Gasto) => void;
   onOpenImportSheet?: () => void;
+  onOpenPremiumModal?: () => void;
 }
 
 export const ExpenseList: React.FC<ExpenseListProps> = ({
   gastos,
+  config,
   onOpenNewExpense,
+  onEditGasto,
   onRefresh,
   onOpenImportSheet,
+  onOpenPremiumModal,
 }) => {
   const { isDark } = useTheme();
   const [busqueda, setBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('TODAS');
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
+  const [filtroOctubreActivo, setFiltroOctubreActivo] = useState(false);
   const [detalleGasto, setDetalleGasto] = useState<Gasto | null>(null);
+  const [mensajeDepuracion, setMensajeDepuracion] = useState('');
+  const [toastMensaje, setToastMensaje] = useState<string | null>(null);
+  const listadoRef = React.useRef<HTMLDivElement>(null);
+
+  // Perfil de Administrador Master (latouchettdiego@gmail.com)
+  const esAdmin = esUsuarioAdmin(config?.email);
+
+  // Detección de gastos anómalos de importación previa (ej. 10M en Otros)
+  const tieneGastosCorruptos = useMemo(() => {
+    return gastos.some(
+      (g) =>
+        ((g.categoria === 'Otros' || g.categoria === 'Otro') && g.total >= 5000000) ||
+        /^\d{4}-\d{2}-\d{2}/.test(g.establecimiento || '')
+    );
+  }, [gastos]);
 
   const mesActualStr = '2026-10';
   const anioActualStr = '2026';
@@ -85,6 +121,11 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
 
   const gastosFiltrados = useMemo(() => {
     return gastos.filter((g) => {
+      // Filtro especial al clickear el Total Acumulado de Octubre
+      if (filtroOctubreActivo && !g.fecha.startsWith(mesActualStr)) {
+        return false;
+      }
+
       if (busqueda.trim()) {
         const query = busqueda.toLowerCase().trim();
         const coincideEstablecimiento = g.establecimiento.toLowerCase().includes(query);
@@ -110,45 +151,128 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
 
       return true;
     });
-  }, [gastos, busqueda, categoriaFiltro, fechaDesde, fechaHasta]);
+  }, [gastos, busqueda, categoriaFiltro, fechaDesde, fechaHasta, filtroOctubreActivo]);
 
-  const handleEliminar = (id: string) => {
-    if (confirm('¿Seguro que deseas eliminar esta factura de la base de datos local?')) {
-      eliminarGasto(id);
-      setDetalleGasto(null);
-      onRefresh();
+  // Suma total del conjunto de gastos actualmente filtrado
+  const totalFiltrado = useMemo(() => {
+    return gastosFiltrados.reduce((acc, g) => acc + g.total, 0);
+  }, [gastosFiltrados]);
+
+  // Sumas acumuladas calculadas individualmente para cada categoría
+  const { totalesPorCategoria, totalGeneralCategorias, categoriasParaMostrar } = useMemo(() => {
+    const map: Record<string, { total: number; count: number }> = {};
+    let sumaGeneral = 0;
+
+    gastos.forEach((g) => {
+      const fechaValida = !filtroOctubreActivo || g.fecha.startsWith(mesActualStr);
+      if (fechaValida) {
+        if (!map[g.categoria]) {
+          map[g.categoria] = { total: 0, count: 0 };
+        }
+        map[g.categoria].total += g.total;
+        map[g.categoria].count += 1;
+        sumaGeneral += g.total;
+      }
+    });
+
+    // Ordenar categorías por mayor gasto acumulado
+    const categoriasOrdenadas = Object.keys(map).sort(
+      (a, b) => (map[b]?.total || 0) - (map[a]?.total || 0)
+    );
+
+    const base = [
+      'Mercado',
+      'Gasolina',
+      'Snacks',
+      'Restaurantes',
+      'Vivienda',
+      'Servicios',
+      'Salud',
+      'Transporte',
+      'Suscripciones',
+      'Crypto',
+    ];
+
+    const todas = Array.from(new Set([...categoriasOrdenadas, ...base]));
+
+    return {
+      totalesPorCategoria: map,
+      totalGeneralCategorias: sumaGeneral,
+      categoriasParaMostrar: todas,
+    };
+  }, [gastos, filtroOctubreActivo]);
+
+  const handleToggleFiltroOctubre = () => {
+    if (filtroOctubreActivo) {
+      setFiltroOctubreActivo(false);
+    } else {
+      setFiltroOctubreActivo(true);
+      setFechaDesde('');
+      setFechaHasta('');
+      setCategoriaFiltro('TODAS');
+      setBusqueda('');
+      setTimeout(() => {
+        listadoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
     }
+  };
+
+  const handleEliminar = (id: string, gastoCompleto?: Gasto) => {
+    eliminarGasto(id, gastoCompleto);
+    setDetalleGasto(null);
+    onRefresh();
+    const nombre = gastoCompleto?.establecimiento || 'Factura';
+    setToastMensaje(`${nombre} eliminada correctamente`);
+    setTimeout(() => {
+      setToastMensaje(null);
+    }, 3500);
   };
 
   return (
     <div className="space-y-4 pb-20">
       {/* 1. Tarjetas de Resumen Mensual & Anual */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Resumen Mensual */}
+        {/* Resumen Mensual / Total Acumulado Octubre (Interactivo y Clickeable, Estilo Limpio Original) */}
         <div
-          className={`p-4 rounded-3xl relative overflow-hidden transition-colors ${
-            isDark
-              ? 'bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-950 border border-neutral-800/90 shadow-xl'
-              : 'bg-white border border-slate-200/90 shadow-sm'
+          role="button"
+          tabIndex={0}
+          onClick={handleToggleFiltroOctubre}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleToggleFiltroOctubre();
+            }
+          }}
+          className={`p-4 rounded-3xl relative overflow-hidden transition-all cursor-pointer group select-none active:scale-[0.99] ${
+            filtroOctubreActivo
+              ? isDark
+                ? 'bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-950 border-2 border-emerald-500 shadow-xl shadow-emerald-500/15 ring-2 ring-emerald-500/30'
+                : 'bg-white border-2 border-emerald-500 shadow-lg shadow-emerald-500/15 ring-2 ring-emerald-500/30'
+              : isDark
+              ? 'bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-950 border border-neutral-800/90 hover:border-emerald-500/60 shadow-xl hover:shadow-emerald-500/5'
+              : 'bg-white border border-slate-200/90 hover:border-emerald-500/60 shadow-sm hover:shadow-md'
           }`}
+          title="Toca para ver, editar o eliminar los gastos registrados en octubre"
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
           <div className="flex items-center justify-between text-xs font-semibold mb-2">
             <span
-              className={`flex items-center gap-1.5 uppercase tracking-wider text-[11px] ${
-                isDark ? 'text-neutral-400' : 'text-slate-500'
+              className={`flex items-center gap-1.5 uppercase tracking-wider text-[11px] font-bold ${
+                isDark ? 'text-emerald-400' : 'text-emerald-600'
               }`}
             >
-              <CalendarIcon size={14} className="text-emerald-500" /> Octubre 2026
+              <CalendarIcon size={14} className="text-emerald-500 shrink-0" /> TOTAL ACUMULADO OCTUBRE 2026
             </span>
             <span
-              className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
-                isDark
-                  ? 'bg-emerald-500/10 text-emerald-400'
-                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold transition-colors ${
+                filtroOctubreActivo
+                  ? 'bg-emerald-500 text-neutral-950 shadow-xs'
+                  : isDark
+                  ? 'bg-emerald-500/15 text-emerald-400 group-hover:bg-emerald-500/25'
+                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200 group-hover:bg-emerald-100'
               }`}
             >
-              Mes Activo
+              {filtroOctubreActivo ? 'Viendo Octubre ✓' : 'Toca para abrir →'}
             </span>
           </div>
           <div
@@ -168,8 +292,31 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             <span>
               {totalAnio > 0 ? `${((totalMes / totalAnio) * 100).toFixed(1)}% del total del año` : '0%'}
             </span>
-            <span className={isDark ? 'text-neutral-500' : 'text-slate-400'}>
-              {gastosMes.length} facturas
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+              <span>{gastosMes.length} facturas</span>
+              <ChevronRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+            </span>
+          </div>
+
+          <div
+            className={`mt-2.5 pt-2 border-t text-[11px] font-medium flex items-center justify-between ${
+              filtroOctubreActivo
+                ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                : isDark
+                ? 'border-neutral-800/40 text-neutral-400 group-hover:text-emerald-400'
+                : 'border-slate-100 text-slate-500 group-hover:text-emerald-700'
+            }`}
+          >
+            <span className="flex items-center gap-1.5 truncate">
+              <Sparkles size={12} className="shrink-0 text-emerald-500" />
+              <span>
+                {filtroOctubreActivo
+                  ? 'Mostrando gastos de octubre (Toca para ver todos)'
+                  : 'Toca aquí para ver, editar o eliminar facturas de octubre'}
+              </span>
+            </span>
+            <span className="text-[10px] font-bold underline shrink-0 ml-1">
+              {filtroOctubreActivo ? 'Desactivar' : 'Ver facturas'}
             </span>
           </div>
         </div>
@@ -259,6 +406,81 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               ))}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* 2. Módulo de Función Premium (Exclusivo Admin latouchettdiego@gmail.com / Bloqueado para otros) */}
+      <div
+        className={`p-4 rounded-3xl border transition-all ${
+          esAdmin
+            ? 'bg-gradient-to-r from-amber-500/15 via-amber-600/10 to-emerald-500/10 border-amber-500/40 shadow-lg shadow-amber-500/5'
+            : isDark
+            ? 'bg-gradient-to-r from-neutral-900/90 via-neutral-900 to-neutral-950 border-neutral-800'
+            : 'bg-gradient-to-r from-amber-50/50 via-white to-slate-50 border-slate-200'
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start sm:items-center gap-3">
+            <div
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border ${
+                esAdmin
+                  ? 'bg-amber-500/20 text-amber-500 border-amber-500/40 shadow-sm'
+                  : isDark
+                  ? 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                  : 'bg-slate-100 text-slate-400 border-slate-200'
+              }`}
+            >
+              {esAdmin ? (
+                <Crown size={22} className="stroke-[2.5]" />
+              ) : (
+                <Lock size={20} className="text-amber-500" />
+              )}
+            </div>
+
+            <div className="space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-amber-500">
+                  {esAdmin ? '👑 Función Premium Master' : '⭐ Función Premium'}
+                </span>
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                    esAdmin
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      : 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                  }`}
+                >
+                  {esAdmin ? 'Modo Administrador' : 'Muy pronto'}
+                </span>
+              </div>
+              <p className={`text-xs ${isDark ? 'text-neutral-300' : 'text-slate-700'}`}>
+                {esAdmin
+                  ? 'Acceso Ilimitado: Auditoría Tributaria DIAN 2026, Libro Fiscal Diario, Deducciones de Renta y Respaldo Total.'
+                  : 'Auditoría Tributaria, Libro Fiscal Oficial y Copias en la Nube. Próximamente disponible.'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onOpenPremiumModal}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shrink-0 shadow-sm ${
+              esAdmin
+                ? 'bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-neutral-950 font-extrabold shadow-amber-500/20'
+                : 'bg-neutral-800 hover:bg-neutral-700 text-amber-400 border border-amber-500/30'
+            }`}
+          >
+            {esAdmin ? (
+              <>
+                <span>Abrir Suite Pro</span>
+                <ChevronRight size={14} />
+              </>
+            ) : (
+              <>
+                <Sparkles size={13} className="text-amber-500" />
+                <span>Muy pronto</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -377,6 +599,19 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             )}
           </div>
 
+          <button
+            onClick={() => descargarGastosCSV(gastos)}
+            className={`px-3 py-3 rounded-2xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap active:scale-95 shrink-0 ${
+              isDark
+                ? 'bg-neutral-900 border-neutral-700 text-neutral-300 hover:bg-neutral-800'
+                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-xs'
+            }`}
+            title="Exportar gastos actuales como archivo CSV para guardar localmente"
+          >
+            <FileDown size={16} className="text-teal-500" />
+            <span className="hidden sm:inline">Exportar CSV</span>
+          </button>
+
           {onOpenImportSheet && (
             <button
               onClick={onOpenImportSheet}
@@ -394,54 +629,193 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
           )}
         </div>
 
-        {/* Filtros rápidos: Categoría */}
+        {/* Filtros rápidos: Categoría con suma acumulada individual */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
           <button
             onClick={() => setCategoriaFiltro('TODAS')}
-            className={`text-xs px-3 py-1.5 rounded-xl border whitespace-nowrap transition-colors cursor-pointer ${
+            className={`text-xs px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
               categoriaFiltro === 'TODAS'
                 ? isDark
-                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-semibold'
-                  : 'bg-emerald-50 border-emerald-500 text-emerald-700 font-semibold shadow-xs'
+                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold shadow-sm'
+                  : 'bg-emerald-50 border-emerald-500 text-emerald-800 font-bold shadow-xs ring-1 ring-emerald-500/30'
                 : isDark
                 ? 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white'
                 : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 shadow-xs'
             }`}
           >
-            Todas ({gastos.length})
+            <span>Todas ({gastos.length})</span>
+            <span className="font-mono text-[10px] font-bold opacity-80">
+              • {formatearMoneda(totalGeneralCategorias)}
+            </span>
           </button>
-          {['Mercado', 'Gasolina', 'Snacks', 'Restaurantes', 'Vivienda', 'Servicios', 'Salud', 'Transporte', 'Suscripciones', 'Crypto'].map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategoriaFiltro(categoriaFiltro === cat ? 'TODAS' : cat)}
-              className={`text-xs px-3 py-1.5 rounded-xl border whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
-                categoriaFiltro === cat
-                  ? isDark
-                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-semibold'
-                    : 'bg-emerald-50 border-emerald-500 text-emerald-700 font-semibold shadow-xs'
-                  : isDark
-                  ? 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white'
-                  : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 shadow-xs'
-              }`}
-            >
-              <CategoryIcon categoria={cat} size={12} />
-              <span>{cat}</span>
-            </button>
-          ))}
+
+          {categoriasParaMostrar.map((cat) => {
+            const info = totalesPorCategoria[cat];
+            const tieneGastos = Boolean(info && info.count > 0);
+            const monto = info?.total || 0;
+            const esActiva = categoriaFiltro === cat;
+
+            return (
+              <button
+                key={cat}
+                onClick={() => setCategoriaFiltro(esActiva ? 'TODAS' : cat)}
+                className={`text-xs px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                  esActiva
+                    ? isDark
+                      ? 'bg-emerald-500/25 border-emerald-500 text-emerald-300 font-bold shadow-sm ring-1 ring-emerald-500/50'
+                      : 'bg-emerald-50 border-emerald-500 text-emerald-800 font-bold shadow-xs ring-1 ring-emerald-500/40'
+                    : isDark
+                    ? 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:text-white hover:border-neutral-700'
+                    : 'bg-white border-slate-200 text-slate-700 hover:text-slate-900 shadow-xs'
+                }`}
+                title={`Filtrar por ${cat} - Total: ${formatearMoneda(monto)}`}
+              >
+                <CategoryIcon categoria={cat as CategoriaGasto} size={13} />
+                <span>{cat}</span>
+                {tieneGastos && (
+                  <span
+                    className={`font-mono text-[10px] px-1.5 py-0.5 rounded-md font-bold ${
+                      esActiva
+                        ? isDark
+                          ? 'bg-emerald-500/30 text-emerald-200'
+                          : 'bg-emerald-200/90 text-emerald-950'
+                        : isDark
+                        ? 'bg-neutral-800/80 text-emerald-400'
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                    }`}
+                  >
+                    {formatearMoneda(monto)}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
+
+        {/* Tarjeta destacada con la suma total al seleccionar cualquier categoría */}
+        {categoriaFiltro !== 'TODAS' && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+              isDark
+                ? 'bg-gradient-to-r from-emerald-950/40 via-neutral-900 to-neutral-950 border-emerald-500/40 text-white shadow-md'
+                : 'bg-gradient-to-r from-emerald-50/90 via-white to-slate-50 border-emerald-400 text-slate-900 shadow-xs'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                <CategoryIcon categoria={categoriaFiltro as CategoriaGasto} size={22} showBadge />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">
+                  Total Acumulado en {categoriaFiltro}
+                </span>
+                <div className="text-xl sm:text-2xl font-extrabold font-mono tracking-tight text-emerald-700 dark:text-emerald-300">
+                  {formatearMoneda(totalFiltrado)}
+                </div>
+              </div>
+            </div>
+
+            <div className="text-right shrink-0">
+              <span className="text-xs font-bold block text-slate-700 dark:text-neutral-300">
+                {gastosFiltrados.length} {gastosFiltrados.length === 1 ? 'factura' : 'facturas'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCategoriaFiltro('TODAS')}
+                className="mt-1 text-[11px] font-bold text-rose-500 hover:text-rose-600 underline cursor-pointer"
+              >
+                Ver todas las categorías
+              </button>
+            </div>
+          </motion.div>
+        )}
       </div>
 
+      {/* Banner de corrección de gastos anómalos si se detectan (ej. 10M en Otros por importación antigua) */}
+      {tieneGastosCorruptos && (
+        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle size={20} className="shrink-0 text-amber-500" />
+            <div>
+              <p className="font-bold">Se detectaron registros anómalos de una importación previa (ej. 10M en 'Otros').</p>
+              <p className="text-[11px] opacity-80">Puedes depurarlos automáticamente para regularizar tus estadísticas de octubre.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const res = limpiarGastosCorruptos();
+              setMensajeDepuracion(`¡Se corrigieron ${res.eliminados} registros atípicos con éxito! Tus estadísticas han vuelto a la normalidad.`);
+              setTimeout(() => setMensajeDepuracion(''), 4000);
+              onRefresh();
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-500 text-neutral-950 font-extrabold text-xs hover:brightness-110 cursor-pointer whitespace-nowrap self-stretch sm:self-auto text-center shadow-sm"
+          >
+            Limpiar y Corregir Gastos
+          </button>
+        </div>
+      )}
+
+      {mensajeDepuracion && (
+        <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 text-xs flex items-center gap-2">
+          <CheckCircle2 size={16} />
+          <span>{mensajeDepuracion}</span>
+        </div>
+      )}
+
       {/* 4. Lista Cronológica de Facturas / Gastos */}
-      <div className="space-y-2">
+      <div ref={listadoRef} className="space-y-2 scroll-mt-6">
+        {filtroOctubreActivo && (
+          <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300">
+              <CalendarIcon size={16} className="shrink-0 text-emerald-500" />
+              <div>
+                <span className="font-bold">Mostrando Gastos de Octubre 2026: </span>
+                <span>{gastosFiltrados.length} facturas encontradas. Puedes <strong>editar</strong> o <strong>eliminar</strong> cada comprobante.</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFiltroOctubreActivo(false)}
+              className="text-[11px] font-bold px-3 py-1.5 rounded-xl bg-emerald-500 text-neutral-950 hover:bg-emerald-400 transition-colors shrink-0 cursor-pointer shadow-xs"
+            >
+              Ver todas
+            </button>
+          </div>
+        )}
+
         <div
           className={`flex items-center justify-between text-xs px-1 ${
             isDark ? 'text-neutral-400' : 'text-slate-500'
           }`}
         >
-          <span className="font-semibold uppercase tracking-wider text-[11px]">
-            {busqueda ? `Resultados para "${busqueda}"` : 'Historial de Facturas'}
-          </span>
-          <span>{gastosFiltrados.length} encontrados</span>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold uppercase tracking-wider text-[11px]">
+              {filtroOctubreActivo
+                ? 'Facturas de Octubre 2026'
+                : busqueda
+                ? `Resultados para "${busqueda}"`
+                : categoriaFiltro !== 'TODAS'
+                ? `Categoría: ${categoriaFiltro}`
+                : 'Historial de Facturas'}
+            </span>
+            <span className="font-mono text-emerald-500 font-bold">({gastosFiltrados.length} encontrados)</span>
+          </div>
+
+          {/* Suma total acumulada del conjunto filtrado */}
+          <div className="flex items-center gap-1.5 font-mono text-xs">
+            <span className="text-neutral-400 text-[11px]">Total:</span>
+            <span
+              className={`font-extrabold px-2 py-0.5 rounded-lg ${
+                isDark
+                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
+                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              }`}
+            >
+              {formatearMoneda(totalFiltrado)}
+            </span>
+          </div>
         </div>
 
         {gastosFiltrados.length === 0 ? (
@@ -464,13 +838,15 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               No se encontraron facturas
             </p>
             <p className={`text-xs mt-1 ${isDark ? 'text-neutral-500' : 'text-slate-400'}`}>
-              Prueba cambiando los filtros o registra una nueva factura.
+              {filtroOctubreActivo
+                ? 'No hay gastos registrados con fecha de octubre 2026.'
+                : 'Prueba cambiando los filtros o registra una nueva factura.'}
             </p>
             <button
-              onClick={onOpenNewExpense}
+              onClick={() => onOpenNewExpense({ fecha: '2026-10-06' })}
               className="mt-4 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors cursor-pointer"
             >
-              Registrar Gasto Ahora
+              Registrar Gasto en Octubre
             </button>
           </div>
         ) : (
@@ -522,21 +898,61 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                 </div>
               </div>
 
-              <div className="text-right">
-                <span
-                  className={`text-sm font-extrabold block font-mono ${
-                    isDark ? 'text-white' : 'text-slate-900'
+              <div className="flex items-center gap-2">
+                <div className="text-right">
+                  <span
+                    className={`text-sm font-extrabold block font-mono ${
+                      isDark ? 'text-white' : 'text-slate-900'
+                    }`}
+                  >
+                    {formatearMoneda(gasto.total)}
+                  </span>
+                  <span
+                    className={`text-[10px] block ${
+                      isDark ? 'text-neutral-400' : 'text-slate-400'
+                    }`}
+                  >
+                    {gasto.metodo_pago}
+                  </span>
+                </div>
+
+                {/* Botón Editar Factura */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onEditGasto) {
+                      onEditGasto(gasto);
+                    } else {
+                      onOpenNewExpense(gasto);
+                    }
+                  }}
+                  className={`p-2 rounded-xl transition-all cursor-pointer ${
+                    isDark
+                      ? 'text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10'
+                      : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'
                   }`}
+                  title="Editar esta factura"
                 >
-                  {formatearMoneda(gasto.total)}
-                </span>
-                <span
-                  className={`text-[10px] block ${
-                    isDark ? 'text-neutral-400' : 'text-slate-400'
+                  <Pencil size={15} />
+                </button>
+
+                {/* Botón Eliminar Factura */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEliminar(gasto.id, gasto);
+                  }}
+                  className={`p-2 rounded-xl transition-all cursor-pointer ${
+                    isDark
+                      ? 'text-neutral-500 hover:text-rose-400 hover:bg-rose-500/10'
+                      : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
                   }`}
+                  title="Eliminar esta factura"
                 >
-                  {gasto.metodo_pago}
-                </span>
+                  <Trash2 size={15} />
+                </button>
               </div>
             </motion.div>
           ))
@@ -551,7 +967,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className={`w-full max-w-sm rounded-3xl p-5 shadow-2xl border ${
+              className={`w-full max-w-sm rounded-3xl p-5 shadow-2xl border max-h-[92vh] overflow-y-auto no-scrollbar ${
                 isDark
                   ? 'bg-neutral-900 border-neutral-800 text-neutral-100'
                   : 'bg-white border-slate-200 text-slate-900'
@@ -699,17 +1115,35 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mt-2">
                 <button
-                  onClick={() => handleEliminar(detalleGasto.id)}
-                  className="flex-1 py-2.5 rounded-xl border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  type="button"
+                  onClick={() => {
+                    const g = detalleGasto;
+                    setDetalleGasto(null);
+                    if (onEditGasto) {
+                      onEditGasto(g);
+                    } else {
+                      onOpenNewExpense(g);
+                    }
+                  }}
+                  className="flex-1 py-3 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                 >
-                  <Trash2 size={14} />
-                  <span>Eliminar Factura</span>
+                  <Pencil size={15} />
+                  <span>Editar</span>
                 </button>
                 <button
+                  type="button"
+                  onClick={() => handleEliminar(detalleGasto.id, detalleGasto)}
+                  className="flex-1 py-3 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                >
+                  <Trash2 size={15} />
+                  <span>Eliminar</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setDetalleGasto(null)}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                  className={`px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
                     isDark
                       ? 'bg-neutral-800 hover:bg-neutral-700 text-white'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
@@ -720,6 +1154,21 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Notificación flotante Toast para confirmar borrado o acción */}
+      <AnimatePresence>
+        {toastMensaje && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-neutral-900/95 text-white text-xs font-semibold shadow-2xl border border-neutral-700/80 flex items-center gap-2 backdrop-blur-md"
+          >
+            <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+            <span>{toastMensaje}</span>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

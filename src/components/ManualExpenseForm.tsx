@@ -26,7 +26,7 @@ import {
   CATEGORIAS_CONFIG,
 } from '../types/finance';
 import { CategoryIcon } from './CategoryIcon';
-import { guardarGasto, formatearMoneda } from '../services/storageService';
+import { guardarGasto, actualizarGasto, formatearMoneda } from '../services/storageService';
 import { useTheme } from '../context/ThemeContext';
 
 interface ManualExpenseFormProps {
@@ -71,8 +71,16 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
   const [errores, setErrores] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (initialValues?.categoria) {
-      setCategoria(initialValues.categoria);
+    if (initialValues) {
+      if (initialValues.establecimiento !== undefined) setEstablecimiento(initialValues.establecimiento);
+      if (initialValues.fecha !== undefined) setFecha(initialValues.fecha);
+      if (initialValues.hora !== undefined) setHora(initialValues.hora);
+      if (initialValues.ciudad !== undefined) setCiudad(initialValues.ciudad);
+      if (initialValues.nit !== undefined) setNit(initialValues.nit);
+      if (initialValues.categoria !== undefined) setCategoria(initialValues.categoria);
+      if (initialValues.metodo_pago !== undefined) setMetodoPago(initialValues.metodo_pago);
+      if (initialValues.total !== undefined) setTotal(String(initialValues.total));
+      if (initialValues.observaciones !== undefined) setObservaciones(initialValues.observaciones);
     }
   }, [initialValues]);
 
@@ -93,22 +101,43 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
     return Object.keys(nuevosErrores).length === 0;
   };
 
+  const esEdicion = Boolean(initialValues?.id);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validar()) return;
 
-    const nuevoGasto = guardarGasto({
-      establecimiento: establecimiento.trim(),
-      fecha,
-      hora,
-      ciudad: ciudad.trim(),
-      nit: nit.trim(),
-      categoria,
-      metodo_pago: metodoPago,
-      total: parseFloat(total),
-      observaciones: observaciones.trim() || undefined,
-      foto_factura_uri: fotoFacturaUri,
-    });
+    let gastoResultado: Gasto;
+
+    if (esEdicion && initialValues?.id) {
+      gastoResultado = actualizarGasto({
+        ...(initialValues as Gasto),
+        id: initialValues.id,
+        establecimiento: establecimiento.trim(),
+        fecha,
+        hora,
+        ciudad: ciudad.trim(),
+        nit: nit.trim(),
+        categoria,
+        metodo_pago: metodoPago,
+        total: parseFloat(total),
+        observaciones: observaciones.trim() || undefined,
+        foto_factura_uri: fotoFacturaUri,
+      });
+    } else {
+      gastoResultado = guardarGasto({
+        establecimiento: establecimiento.trim(),
+        fecha,
+        hora,
+        ciudad: ciudad.trim(),
+        nit: nit.trim(),
+        categoria,
+        metodo_pago: metodoPago,
+        total: parseFloat(total),
+        observaciones: observaciones.trim() || undefined,
+        foto_factura_uri: fotoFacturaUri,
+      });
+    }
 
     confetti({
       particleCount: 45,
@@ -117,7 +146,7 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
       colors: ['#10b981', '#14b8a6', '#06b6d4', '#f59e0b'],
     });
 
-    onSaved(nuevoGasto);
+    onSaved(gastoResultado);
   };
 
   const seleccionarEstablecimientoFrecuente = (item: typeof ESTABLECIMIENTOS_FRECUENTES[0]) => {
@@ -157,10 +186,10 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
             </div>
             <div>
               <h3 className={`font-bold text-base ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                {initialValues?.establecimiento ? 'Verificar y Guardar Factura' : 'Nueva Factura de Gasto'}
+                {esEdicion ? 'Editar Factura' : initialValues?.establecimiento ? 'Verificar y Guardar Factura' : 'Nueva Factura de Gasto'}
               </h3>
               <p className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                Validado en local • SQLite Offline
+                {esEdicion ? 'Modifica los datos y montos de esta factura' : 'Validado en local • SQLite Offline'}
               </p>
             </div>
           </div>
@@ -535,7 +564,7 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
             className="flex-2 py-3 px-4 rounded-xl font-semibold text-sm bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer"
           >
             <Check size={18} className="stroke-[2.5]" />
-            <span>Guardar Factura</span>
+            <span>{esEdicion ? 'Guardar Cambios' : 'Guardar Factura'}</span>
           </button>
         </div>
 

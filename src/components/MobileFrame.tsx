@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Settings } from 'lucide-react';
+import { Plus, Settings, Crown } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { AuraLogo } from './AuraLogo';
 
@@ -10,7 +10,9 @@ interface MobileFrameProps {
   onOpenScanner: () => void;
   onOpenNewExpense: () => void;
   onOpenSettings: () => void;
+  onOpenPremium?: () => void;
   pendientesSync: number;
+  esAdmin?: boolean;
 }
 
 export const MobileFrame: React.FC<MobileFrameProps> = ({
@@ -20,7 +22,9 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
   onOpenScanner,
   onOpenNewExpense,
   onOpenSettings,
+  onOpenPremium,
   pendientesSync,
+  esAdmin = false,
 }) => {
   const { isDark } = useTheme();
 
@@ -30,9 +34,10 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
         isDark ? 'bg-[#090d16] text-neutral-100' : 'bg-slate-50 text-slate-800'
       }`}
     >
-      {/* Barra superior de la aplicación (Header limpio oficial) */}
+      {/* Barra superior de la aplicación con Safe Area para barra de estado Android (reloj, batería, notch) */}
       <header
-        className={`sticky top-0 z-30 w-full px-4 py-3 flex items-center justify-between border-b backdrop-blur-xl transition-colors ${
+        style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 1.75rem)' }}
+        className={`sticky top-0 z-30 w-full px-4 pb-3 flex items-center justify-between border-b backdrop-blur-xl transition-colors ${
           isDark
             ? 'bg-[#090d16]/95 border-white/10'
             : 'bg-white/95 border-slate-200/90 shadow-xs'
@@ -58,8 +63,26 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
           </div>
         </div>
 
-        {/* Acciones principales de cabecera: Botón Gasto y la Tuerca de Ajustes */}
+        {/* Acciones principales de cabecera: Botón Pro, Botón Gasto y la Tuerca de Ajustes */}
         <div className="flex items-center gap-2">
+          {/* Botón Corona PRO */}
+          {onOpenPremium && (
+            <button
+              onClick={onOpenPremium}
+              className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1 shadow-sm transition-all active:scale-95 cursor-pointer ${
+                esAdmin
+                  ? 'bg-gradient-to-r from-amber-500/15 to-amber-600/15 border-amber-500/40 text-amber-500 hover:bg-amber-500/25'
+                  : isDark
+                  ? 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-amber-500/50 hover:text-amber-400'
+                  : 'bg-white border-slate-200 text-slate-700 hover:border-amber-400 hover:text-amber-600 shadow-2xs'
+              }`}
+              title={esAdmin ? 'Aura Pro: Administrador Master' : 'Aura Pro: Funciones Premium'}
+            >
+              <Crown size={14} className={esAdmin ? 'text-amber-500 fill-amber-500' : 'text-amber-500'} />
+              <span className="hidden sm:inline">{esAdmin ? 'Admin Pro' : 'Pro'}</span>
+            </button>
+          )}
+
           {/* Botón Nuevo Gasto */}
           <button
             onClick={onOpenNewExpense}

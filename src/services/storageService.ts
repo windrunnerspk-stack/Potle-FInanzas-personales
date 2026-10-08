@@ -20,13 +20,23 @@ const STORAGE_KEY_CONFIG = 'aura_finances_config_v1';
 const STORAGE_KEY_QUEUE = 'aura_finances_sync_queue_v1';
 const STORAGE_KEY_CATEGORIAS = 'aura_finances_custom_categories_v1';
 
+export const ADMIN_EMAIL = 'latouchettdiego@gmail.com';
+
+/**
+ * Valida si un correo electrónico corresponde al Administrador Pro del sistema
+ */
+export function esUsuarioAdmin(email?: string): boolean {
+  if (!email) return false;
+  return email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase();
+}
+
 const INITIAL_CONFIG: UsuarioConfig = {
-  email: 'latouchettdiego@gmail.com',
+  email: '',
   modo: 'sincronizado',
   moneda: 'COP',
   onboarding_completado: true,
-  notificaciones_email: true,
-  google_sheets_id: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms',
+  notificaciones_email: false,
+  google_sheets_id: '',
   ultima_sincronizacion: new Date().toISOString(),
 };
 
@@ -249,6 +259,43 @@ export function eliminarCategoria(nombre: string): { exito: boolean; categorias:
 // ============================================================
 // GASTOS (FACTURAS)
 // ============================================================
+
+/**
+ * Detecta y elimina gastos corruptos o fantasmas (por ejemplo facturas importadas con NIT
+ * interpretado erróneamente como total de 10 millones en 'Otros' o fechas en el establecimiento)
+ */
+export function limpiarGastosCorruptos(): { eliminados: number; totalRestante: number } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_GASTOS);
+    if (!raw) return { eliminados: 0, totalRestante: 0 };
+    const lista: Gasto[] = JSON.parse(raw);
+    if (!Array.isArray(lista)) return { eliminados: 0, totalRestante: 0 };
+
+    const limpia = lista.filter((g) => {
+      // Condición 1: Categoría 'Otros' con montos exorbitantes (>= $5.000.000 COP) generados por error de NIT/offset
+      const esOtrosExorbitante = (g.categoria === 'Otros' || g.categoria === 'Otro') && g.total >= 5000000;
+      // Condición 2: Establecimiento corrupto que es fecha, hora o puro número NIT
+      const est = String(g.establecimiento || '');
+      const esEstablecimientoCorrupto =
+        /^\d{4}-\d{2}-\d{2}/.test(est) ||
+        /^\d{8,12}$/.test(est.replace(/[^0-9]/g, ''));
+
+      return !esOtrosExorbitante && !esEstablecimientoCorrupto;
+    });
+
+    const eliminados = lista.length - limpia.length;
+    if (eliminados > 0) {
+      localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(limpia));
+      const borrados = lista.filter((g) => !limpia.some((l) => l.id === g.id));
+      borrados.forEach((b) => deleteGastoFromFirestore(b.id).catch(() => {}));
+    }
+
+    return { eliminados, totalRestante: limpia.length };
+  } catch {
+    return { eliminados: 0, totalRestante: 0 };
+  }
+}
+
 export function obtenerGastos(): Gasto[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_GASTOS);
@@ -259,8 +306,26 @@ export function obtenerGastos(): Gasto[] {
     const lista = JSON.parse(raw);
     if (!Array.isArray(lista)) return SEED_GASTOS;
 
+    // Sanear gastos corruptos al vuelo si existen
+    let procesada = lista;
+    const tieneCorruptos = lista.some(
+      (g: Gasto) =>
+        ((g.categoria === 'Otros' || g.categoria === 'Otro') && g.total >= 5000000) ||
+        /^\d{4}-\d{2}-\d{2}/.test(g.establecimiento || '')
+    );
+    if (tieneCorruptos) {
+      procesada = lista.filter(
+        (g: Gasto) =>
+          !((g.categoria === 'Otros' || g.categoria === 'Otro') && g.total >= 5000000) &&
+          !/^\d{4}-\d{2}-\d{2}/.test(g.establecimiento || '')
+      );
+      localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(procesada));
+      const borrados = lista.filter((g: Gasto) => !procesada.some((p: Gasto) => p.id === g.id));
+      borrados.forEach((b: Gasto) => deleteGastoFromFirestore(b.id).catch(() => {}));
+    }
+
     // Normalizar categorías al vuelo para garantizar congruencia con las 23 categorías
-    return lista.map((g: Gasto) => ({
+    return procesada.map((g: Gasto) => ({
       ...g,
       categoria: normalizarCategoria(g.categoria),
     }));
@@ -297,11 +362,83 @@ export function guardarGasto(nuevoGasto: Omit<Gasto, 'id' | 'sincronizado' | 'cr
   return gasto;
 }
 
-export function eliminarGasto(id: string): void {
+/**
+ * Actualiza una factura existente y sincroniza con Firestore
+ */
+export function actualizarGasto(gastoActualizado: Gasto): Gasto {
   const lista = obtenerGastos();
-  const filtrada = lista.filter((g) => g.id !== id);
-  localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(filtrada));
-  deleteGastoFromFirestore(id).catch((e) => console.warn('Delete firestore gasto error:', e));
+  const idStr = String(gastoActualizado.id || '').trim();
+  const timestamp = new Date().toISOString();
+
+  const gastoLimpio: Gasto = {
+    ...gastoActualizado,
+    categoria: normalizarCategoria(gastoActualizado.categoria),
+    actualizado_en: timestamp,
+  };
+
+  let encontrado = false;
+  const actualizada = lista.map((g) => {
+    const gidStr = String(g.id || '').trim();
+    if ((idStr && gidStr === idStr) || g.id === gastoActualizado.id) {
+      encontrado = true;
+      return gastoLimpio;
+    }
+    return g;
+  });
+
+  if (!encontrado) {
+    actualizada.unshift(gastoLimpio);
+  }
+
+  localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(actualizada));
+
+  // Sincronizar en Firestore
+  syncGastoToFirestore(gastoLimpio).catch((e) => console.warn('Sync updated gasto error:', e));
+
+  return gastoLimpio;
+}
+
+export function eliminarGasto(id: string, gastoCompleto?: Partial<Gasto>): boolean {
+  try {
+    const idStr = String(id || '').trim();
+    const lista = obtenerGastos();
+
+    const filtrada = lista.filter((g) => {
+      const gidStr = String(g.id || '').trim();
+      // 1. Coincidencia por ID (tipo string o number)
+      if (idStr && (gidStr === idStr || String(g.id) === String(id))) {
+        return false;
+      }
+      // 2. Si se suministró el objeto completo, verificar por contenido exacto (por si el ID varió o está corrupto)
+      if (
+        gastoCompleto &&
+        gastoCompleto.fecha === g.fecha &&
+        String(gastoCompleto.establecimiento || '').toLowerCase().trim() === String(g.establecimiento || '').toLowerCase().trim() &&
+        Math.abs(Number(gastoCompleto.total) - Number(g.total)) < 0.01
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(filtrada));
+
+    // Borrar de Firestore
+    if (idStr) {
+      deleteGastoFromFirestore(idStr).catch((e) => console.warn('Delete firestore gasto error:', e));
+    }
+    if (gastoCompleto?.id) {
+      const altId = String(gastoCompleto.id).trim();
+      if (altId && altId !== idStr) {
+        deleteGastoFromFirestore(altId).catch(() => {});
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error al eliminar gasto:', err);
+    return false;
+  }
 }
 
 /**
@@ -466,3 +603,229 @@ export function formatearMoneda(monto: number, moneda: string = 'COP'): string {
     maximumFractionDigits: 2,
   }).format(monto);
 }
+
+/**
+ * Exporta el listado actual de gastos a formato CSV compatible con Excel y Google Sheets
+ * Siguiendo el orden exacto de 18 columnas:
+ * ID, Fecha, Hora, Establecimiento, NIT, Ciudad, Categoría, Subcategoría, Método de pago, Subtotal, IVA, Descuento, Propina, Total, Observaciones, Imagen (Drive), Fecha de registro, MesAño
+ */
+export function exportarGastosACSV(gastos: Gasto[]): string {
+  const escapeCSV = (val?: string | number) => {
+    if (val === undefined || val === null) return '';
+    const str = String(val);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes(';')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const encabezados = [
+    'ID',
+    'Fecha',
+    'Hora',
+    'Establecimiento',
+    'NIT',
+    'Ciudad',
+    'Categoría',
+    'Subcategoría',
+    'Método de pago',
+    'Subtotal',
+    'IVA',
+    'Descuento',
+    'Propina',
+    'Total',
+    'Observaciones',
+    'Imagen (Drive)',
+    'Fecha de registro',
+    'MesAño',
+  ];
+
+  const filas = gastos.map((g, idx) => {
+    // Extraer subcategoría si está en observaciones
+    let subcategoria = '';
+    let obsLimpia = g.observaciones || '';
+    const matchSubcat = obsLimpia.match(/Subcategor[ií]a:\s*([^|]+)/i);
+    if (matchSubcat) {
+      subcategoria = matchSubcat[1].trim();
+    }
+
+    // Calcular MesAño a partir de la fecha
+    let mesAno = '';
+    if (g.fecha && g.fecha.length >= 7) {
+      mesAno = g.fecha.substring(0, 7);
+    }
+
+    return [
+      escapeCSV(g.id || idx + 1),
+      escapeCSV(g.fecha),
+      escapeCSV(g.hora || '12:00'),
+      escapeCSV(g.establecimiento),
+      escapeCSV(g.nit || ''),
+      escapeCSV(g.ciudad || 'Bogotá'),
+      escapeCSV(g.categoria),
+      escapeCSV(subcategoria),
+      escapeCSV(g.metodo_pago),
+      escapeCSV(g.total), // Subtotal base
+      escapeCSV(0), // IVA
+      escapeCSV(0), // Descuento
+      escapeCSV(0), // Propina
+      escapeCSV(g.total), // Total
+      escapeCSV(obsLimpia),
+      escapeCSV(g.foto_factura_uri || ''),
+      escapeCSV(g.creado_en || `${g.fecha} ${g.hora || '12:00'}:00`),
+      escapeCSV(mesAno),
+    ].join(',');
+  });
+
+  return [encabezados.join(','), ...filas].join('\r\n');
+}
+
+/**
+ * Genera contenido en formato TSV (separado por tabulaciones) con las 18 columnas exactas
+ * para que el usuario pueda copiar y pegar con 1 solo clic (Ctrl+V) directamente en Google Sheets.
+ */
+export function exportarGastosParaGoogleSheetsTSV(gastos: Gasto[]): string {
+  const encabezados = [
+    'ID',
+    'Fecha',
+    'Hora',
+    'Establecimiento',
+    'NIT',
+    'Ciudad',
+    'Categoría',
+    'Subcategoría',
+    'Método de pago',
+    'Subtotal',
+    'IVA',
+    'Descuento',
+    'Propina',
+    'Total',
+    'Observaciones',
+    'Imagen (Drive)',
+    'Fecha de registro',
+    'MesAño',
+  ];
+
+  const filas = gastos.map((g, idx) => {
+    let subcategoria = '';
+    let obsLimpia = g.observaciones || '';
+    const matchSubcat = obsLimpia.match(/Subcategor[ií]a:\s*([^|]+)/i);
+    if (matchSubcat) {
+      subcategoria = matchSubcat[1].trim();
+    }
+    let mesAno = g.fecha && g.fecha.length >= 7 ? g.fecha.substring(0, 7) : '';
+
+    return [
+      g.id || idx + 1,
+      g.fecha,
+      g.hora || '12:00',
+      g.establecimiento,
+      g.nit || '',
+      g.ciudad || 'Bogotá',
+      g.categoria,
+      subcategoria,
+      g.metodo_pago,
+      g.total,
+      0,
+      0,
+      0,
+      g.total,
+      obsLimpia,
+      g.foto_factura_uri || '',
+      g.creado_en || `${g.fecha} ${g.hora || '12:00'}:00`,
+      mesAno,
+    ].join('\t');
+  });
+
+  return [encabezados.join('\t'), ...filas].join('\r\n');
+}
+
+/**
+ * Dispara la descarga local en el navegador de un archivo CSV con codificación UTF-8 BOM
+ */
+export function descargarGastosCSV(gastos: Gasto[], nombreArchivo: string = 'Aura_Finanzas_Gastos'): void {
+  const csvContent = exportarGastosACSV(gastos);
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const fechaHoy = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `${nombreArchivo}_${fechaHoy}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Genera un backup completo JSON de toda la app (gastos, categorías y configuración)
+ * para garantizar cero pérdida de datos antes o después de actualizar la APK.
+ */
+export function generarBackupCompletoJSON(): string {
+  const gastos = obtenerGastos();
+  const config = obtenerConfiguracion();
+  const categorias = obtenerCategorias();
+  return JSON.stringify(
+    {
+      version: '1.1',
+      generadoEl: new Date().toISOString(),
+      config,
+      categorias,
+      gastos,
+    },
+    null,
+    2
+  );
+}
+
+/**
+ * Dispara la descarga del respaldo JSON completo
+ */
+export function descargarBackupJSON(): void {
+  const jsonContent = generarBackupCompletoJSON();
+  const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const fechaHoy = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `AuraFinanzas_CopiaSeguridad_${fechaHoy}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Restaura un backup completo JSON sin borrar nada preexistente de forma destructiva
+ */
+export function restaurarBackupCompletoJSON(jsonString: string): {
+  exito: boolean;
+  gastosRestaurados: number;
+  error?: string;
+} {
+  try {
+    const data = JSON.parse(jsonString);
+    if (!data || !Array.isArray(data.gastos)) {
+      return {
+        exito: false,
+        gastosRestaurados: 0,
+        error: 'El archivo de respaldo no tiene el formato válido.',
+      };
+    }
+    const actuales = obtenerGastos();
+    const mapa = new Map<string, Gasto>();
+    // Unir actuales con los del backup sin duplicados
+    data.gastos.forEach((g: Gasto) => mapa.set(g.id, g));
+    actuales.forEach((g) => mapa.set(g.id, g));
+    const unificados = Array.from(mapa.values());
+
+    localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(unificados));
+    if (data.categorias && Array.isArray(data.categorias)) {
+      localStorage.setItem(STORAGE_KEY_CATEGORIAS, JSON.stringify(data.categorias));
+    }
+    return { exito: true, gastosRestaurados: unificados.length };
+  } catch (err: any) {
+    return { exito: false, gastosRestaurados: 0, error: err.message || 'Error al procesar el archivo.' };
+  }
+}
+

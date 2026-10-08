@@ -9,6 +9,7 @@ import { Gasto, UsuarioConfig } from './types/finance';
 import {
   obtenerGastos,
   obtenerConfiguracion,
+  esUsuarioAdmin
 } from './services/storageService';
 import { MobileFrame } from './components/MobileFrame';
 import { ExpenseList } from './components/ExpenseList';
@@ -18,7 +19,10 @@ import { ManualExpenseForm } from './components/ManualExpenseForm';
 import { ReceiptScanner } from './components/ReceiptScanner';
 import { SyncSheetModal } from './components/SyncSheetModal';
 import { SettingsModal } from './components/SettingsModal';
+import { OnboardingModal } from './components/OnboardingModal';
+import { PremiumProModal } from './components/PremiumProModal';
 import { useTheme } from './context/ThemeContext';
+import { Crown, Lock } from 'lucide-react';
 
 export default function App() {
   const { isDark } = useTheme();
@@ -28,6 +32,7 @@ export default function App() {
 
   // Modales
   const [mostrarSettings, setMostrarSettings] = useState(false);
+  const [mostrarPremiumModal, setMostrarPremiumModal] = useState(false);
   const [mostrarFormGasto, setMostrarFormGasto] = useState(false);
   const [valoresInicialesForm, setValoresInicialesForm] = useState<Partial<Gasto> | undefined>(undefined);
   const [mostrarScanner, setMostrarScanner] = useState(false);
@@ -70,6 +75,7 @@ export default function App() {
   };
 
   const pendientesSync = gastos.filter((g) => !g.sincronizado).length;
+  const esAdmin = esUsuarioAdmin(config.email);
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'bg-[#090d16]' : 'bg-slate-50'}`}>
@@ -79,6 +85,8 @@ export default function App() {
         onOpenScanner={() => setMostrarScanner(true)}
         onOpenNewExpense={() => handleOpenNewExpense()}
         onOpenSettings={() => setMostrarSettings(true)}
+        onOpenPremium={() => setMostrarPremiumModal(true)}
+        esAdmin={esAdmin}
         pendientesSync={pendientesSync}
       >
         {/* Barra sutil de estado y acceso a la tuerca */}
@@ -90,23 +98,40 @@ export default function App() {
             </span>
           </div>
 
-          <button
-            onClick={() => setMostrarSettings(true)}
-            className={`text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer ${
-              isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <span>Ajustes & Opciones</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMostrarPremiumModal(true)}
+              className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 transition-all cursor-pointer ${
+                esAdmin
+                  ? 'bg-amber-500/15 border border-amber-500/40 text-amber-400 hover:bg-amber-500/25'
+                  : 'bg-neutral-800 border border-neutral-700 text-neutral-400 hover:border-amber-500/40 hover:text-amber-400'
+              }`}
+            >
+              {esAdmin ? <Crown size={12} className="text-amber-500" /> : <Lock size={11} className="text-amber-500" />}
+              <span>{esAdmin ? 'Admin Master' : 'Aura Pro'}</span>
+            </button>
+
+            <button
+              onClick={() => setMostrarSettings(true)}
+              className={`text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer ${
+                isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <span>Ajustes</span>
+            </button>
+          </div>
         </div>
 
         {/* Tab 1: Mis Gastos & Facturas */}
         {activeTab === 'gastos' && (
           <ExpenseList
             gastos={gastos}
-            onOpenNewExpense={() => handleOpenNewExpense()}
+            config={config}
+            onOpenNewExpense={(prefill) => handleOpenNewExpense(prefill)}
+            onEditGasto={(gasto) => handleOpenNewExpense(gasto)}
             onRefresh={recargarDatos}
             onOpenImportSheet={() => handleOpenImportSheet('importar')}
+            onOpenPremiumModal={() => setMostrarPremiumModal(true)}
           />
         )}
 
@@ -167,6 +192,20 @@ export default function App() {
             onConfigUpdated={(nuevaConf) => setConfig(nuevaConf)}
             onDataReset={recargarDatos}
             onOpenSyncSheets={() => handleOpenImportSheet('sheet')}
+            onOpenPremium={() => setMostrarPremiumModal(true)}
+          />
+        )}
+
+        {mostrarPremiumModal && (
+          <PremiumProModal
+            isOpen={mostrarPremiumModal}
+            onClose={() => setMostrarPremiumModal(false)}
+            config={config}
+            gastos={gastos}
+            onConfigUpdated={(nuevaConf) => {
+              setConfig(nuevaConf);
+              recargarDatos();
+            }}
           />
         )}
 
@@ -195,6 +234,16 @@ export default function App() {
             pestañaInicial={pestañaSyncModal}
             onClose={() => setMostrarSyncModal(false)}
             onSynced={() => recargarDatos()}
+          />
+        )}
+
+        {!config.onboarding_completado && (
+          <OnboardingModal
+            config={config}
+            onComplete={(nuevaConf) => {
+              setConfig(nuevaConf);
+              recargarDatos();
+            }}
           />
         )}
       </AnimatePresence>

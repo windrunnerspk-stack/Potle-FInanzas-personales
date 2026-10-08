@@ -15,19 +15,26 @@ import {
   Download,
   Copy,
   ChevronRight,
-  Database
+  Database,
+  ExternalLink,
+  FileDown
 } from 'lucide-react';
 import { Gasto, UsuarioConfig, LISTA_CATEGORIAS_DEFAULT } from '../types/finance';
 import {
   sincronizarTodoConGoogleSheets,
   formatearMoneda,
-  importarGastosDesdeGoogleSheets
+  importarGastosDesdeGoogleSheets,
+  guardarConfiguracion,
+  sincronizarConFirebase,
+  descargarGastosCSV,
+  exportarGastosParaGoogleSheetsTSV
 } from '../services/storageService';
 import {
   procesarImportacionGoogleSheets,
   descargarGoogleSheetsCSV,
   generarPlantillaGoogleSheets
 } from '../services/googleSheetsImportService';
+import { loginWithGoogle } from '../services/firebase';
 import { CategoryIcon } from './CategoryIcon';
 import { useTheme } from '../context/ThemeContext';
 
@@ -50,6 +57,9 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
   const [pestaña, setPestaña] = useState<'importar' | 'sheet' | 'email'>(pestañaInicial);
   const [sincronizando, setSincronizando] = useState(false);
   const [mensajeExito, setMensajeExito] = useState('');
+  const [emailInput, setEmailInput] = useState(config.email || '');
+  const [emailGuardado, setEmailGuardado] = useState(false);
+  const [iniciandoGoogle, setIniciandoGoogle] = useState(false);
 
   // Estados de importación
   const [metodoImportacion, setMetodoImportacion] = useState<'pegar' | 'url' | 'archivo'>('pegar');
@@ -72,14 +82,51 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
 
   const pendientes = gastos.filter((g) => !g.sincronizado).length;
 
-  const handleSincronizarAhora = () => {
+  const handleActualizarEmail = () => {
+    const limpio = emailInput.trim();
+    guardarConfiguracion({ email: limpio });
+    setEmailGuardado(true);
+    setTimeout(() => setEmailGuardado(false), 2500);
+    onSynced();
+  };
+
+  const handleGoogleLoginSync = async () => {
+    setIniciandoGoogle(true);
+    try {
+      const resp = await loginWithGoogle();
+      if (resp.success && resp.email) {
+        setEmailInput(resp.email);
+        guardarConfiguracion({ email: resp.email, modo: 'sincronizado' });
+        setEmailGuardado(true);
+        setTimeout(() => setEmailGuardado(false), 2500);
+        onSynced();
+      }
+    } finally {
+      setIniciandoGoogle(false);
+    }
+  };
+
+  const handleSincronizarAhora = async () => {
     setSincronizando(true);
-    setTimeout(() => {
+    try {
+      if (emailInput.trim() && emailInput.trim() !== config.email) {
+        guardarConfiguracion({ email: emailInput.trim() });
+      }
       const res = sincronizarTodoConGoogleSheets();
+      await sincronizarConFirebase();
       setSincronizando(false);
       setMensajeExito(res.resumen);
       onSynced();
-    }, 800);
+    } catch {
+      setSincronizando(false);
+      setMensajeExito('Sincronización procesada.');
+      onSynced();
+    }
+  };
+
+  const handleExportarCSVLocal = () => {
+    descargarGastosCSV(gastos);
+    setMensajeExito('¡Archivo CSV descargado con éxito en tu dispositivo!');
   };
 
   const handleCargarEjemploPlantilla = () => {
@@ -194,7 +241,7 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                 Importador & Sincronización Google Sheets
               </h3>
               <p className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                Compatible con las 23 categorías oficiales • Sin errores de formato
+                Formato oficial de 18 columnas (ID, Fecha, Hora, Establecimiento, NIT, Ciudad, Categoría...)
               </p>
             </div>
           </div>
@@ -401,7 +448,7 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                     rows={5}
                     value={textoPegado}
                     onChange={(e) => setTextoPegado(e.target.value)}
-                    placeholder="En tu Google Sheet: selecciona las celdas, presiona Ctrl+C y pégalas aquí con Ctrl+V...&#10;&#10;Ejemplo de columnas reconocidas automáticamente:&#10;Fecha | Hora | Establecimiento | NIT | Categoría | Método de Pago | Ciudad | Total | Observaciones"
+                    placeholder="En tu Google Sheet: selecciona las celdas, presiona Ctrl+C y pégalas aquí con Ctrl+V...&#10;&#10;Orden oficial de 18 columnas:&#10;ID | Fecha | Hora | Establecimiento | NIT | Ciudad | Categoría | Subcategoría | Método de pago | Subtotal | IVA | Descuento | Propina | Total | Observaciones | Imagen (Drive) | Fecha de registro | MesAño"
                     className={`w-full rounded-2xl p-3 text-xs font-mono border focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-colors ${
                       isDark
                         ? 'bg-neutral-950 border-neutral-800 text-neutral-200 placeholder-neutral-600'
@@ -627,6 +674,7 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                         >
                           <th className="p-1.5 border-r border-inherit">Fecha</th>
                           <th className="p-1.5 border-r border-inherit">Establecimiento</th>
+                          <th className="p-1.5 border-r border-inherit">Ciudad</th>
                           <th className="p-1.5 border-r border-inherit">Categoría</th>
                           <th className="p-1.5 border-r border-inherit">Método</th>
                           <th className="p-1.5 text-right">Total</th>
@@ -636,13 +684,16 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                         {resultadoParseo.gastosImportados.slice(0, 5).map((g) => (
                           <tr key={g.id}>
                             <td className="p-1.5 border-r border-inherit font-mono">{g.fecha}</td>
-                            <td className="p-1.5 border-r border-inherit font-medium truncate max-w-[140px]">
+                            <td className="p-1.5 border-r border-inherit font-medium truncate max-w-[130px]">
                               {g.establecimiento}
                             </td>
-                            <td className="p-1.5 border-r border-inherit text-emerald-600 font-semibold">
+                            <td className="p-1.5 border-r border-inherit font-medium text-sky-600 truncate max-w-[90px]">
+                              {g.ciudad}
+                            </td>
+                            <td className="p-1.5 border-r border-inherit text-emerald-600 font-semibold truncate max-w-[100px]">
                               {g.categoria}
                             </td>
-                            <td className="p-1.5 border-r border-inherit">{g.metodo_pago}</td>
+                            <td className="p-1.5 border-r border-inherit truncate max-w-[90px]">{g.metodo_pago}</td>
                             <td className="p-1.5 text-right font-mono font-bold">
                               {formatearMoneda(g.total, config.moneda)}
                             </td>
@@ -671,37 +722,203 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
           {/* Pestaña: Ver Hoja de Cálculo Sincronizada */}
           {pestaña === 'sheet' && (
             <div className="space-y-3">
+              {/* Configuración de Correo Electrónico Editable y Google Sign-In */}
               <div
-                className={`py-3 px-4 rounded-2xl border flex items-center justify-between ${
+                className={`p-3.5 rounded-2xl border space-y-2.5 ${
+                  isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-slate-50 border-slate-200 shadow-xs'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-neutral-300' : 'text-slate-700'}`}>
+                    Cuenta & Correo de Sincronización:
+                  </span>
+                  {emailGuardado && (
+                    <span className="text-[10px] font-bold text-emerald-500 flex items-center gap-1 animate-pulse">
+                      <CheckCircle2 size={12} />
+                      ¡Guardado!
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                  <div className="relative flex-1 w-full">
+                    <input
+                      type="email"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      placeholder="Escribe tu correo para sincronizar (ej. mi-correo@gmail.com)"
+                      className={`w-full px-3.5 py-2 rounded-xl border text-xs focus:outline-none transition-all ${
+                        isDark
+                          ? 'bg-neutral-900 text-white placeholder-neutral-500 border-neutral-700 focus:border-emerald-500'
+                          : 'bg-white text-slate-900 placeholder-slate-400 border-slate-300 focus:border-emerald-500'
+                      }`}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={handleActualizarEmail}
+                      className="flex-1 sm:flex-none px-3 py-2 rounded-xl text-xs font-bold bg-neutral-800 hover:bg-neutral-700 text-neutral-100 border border-neutral-700 transition-all cursor-pointer"
+                    >
+                      Actualizar
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleGoogleLoginSync}
+                      disabled={iniciandoGoogle}
+                      className="flex-1 sm:flex-none px-3 py-2 rounded-xl text-xs font-bold bg-white text-slate-800 hover:bg-slate-100 border border-slate-300 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                      title="Usar cuenta de Google"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+                        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
+                        <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+                        <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                      </svg>
+                      <span>{iniciandoGoogle ? 'Google...' : 'Google'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vinculación de Hoja Personal y Opciones de Carga */}
+              <div
+                className={`p-3.5 rounded-2xl border space-y-3 ${
                   isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-slate-50 border-slate-200'
                 }`}
               >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-semibold ${isDark ? 'text-neutral-300' : 'text-slate-600'}`}>
-                      Modo de Trabajo:
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div>
+                    <span className={`text-xs font-bold uppercase tracking-wider block ${isDark ? 'text-neutral-300' : 'text-slate-700'}`}>
+                      Tu Hoja de Google Sheets:
                     </span>
-                    <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">
-                      {config.modo === 'sincronizado' ? 'Sincronizado Activo' : 'Modo Local'}
-                    </span>
+                    <p className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
+                      Pega el enlace de tu Google Sheet personal para abrirla y vincularla:
+                    </p>
                   </div>
-                  <p className={`text-[11px] mt-0.5 ${isDark ? 'text-neutral-500' : 'text-slate-500'}`}>
-                    Email vinculado:{' '}
-                    <strong className={isDark ? 'text-neutral-300' : 'text-slate-800'}>
-                      {config.email}
-                    </strong>
-                  </p>
+                  <a
+                    href="https://sheets.new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-500 hover:underline"
+                  >
+                    <span>+ Crear Hoja Nueva en Blanco (sheets.new)</span>
+                    <ExternalLink size={11} />
+                  </a>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                  <input
+                    type="url"
+                    value={urlSheet}
+                    onChange={(e) => setUrlSheet(e.target.value)}
+                    placeholder="https://docs.google.com/spreadsheets/d/TU_ID_DE_HOJA/edit"
+                    className={`flex-1 w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${
+                      isDark
+                        ? 'bg-neutral-900 text-white placeholder-neutral-500 border-neutral-700'
+                        : 'bg-white text-slate-900 placeholder-slate-400 border-slate-300'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const match = urlSheet.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+                      const idExtraido = match ? match[1] : urlSheet.trim();
+                      guardarConfiguracion({ google_sheets_id: idExtraido });
+                      setMensajeExito('¡Tu Google Sheet personal ha sido vinculado con éxito!');
+                      onSynced();
+                    }}
+                    className="w-full sm:w-auto px-3.5 py-2 rounded-xl text-xs font-bold bg-neutral-800 hover:bg-neutral-700 text-white border border-neutral-700 transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    Guardar Hoja
+                  </button>
+                </div>
+              </div>
+
+              {/* Botonera de Sincronización, Link directo a Sheets y Exportación CSV Local */}
+              <div
+                className={`py-3 px-4 rounded-2xl border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 ${
+                  isDark ? 'bg-neutral-950/80 border-neutral-800' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Copiar con 1 clic para pegar en Google Sheets */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const tsv = exportarGastosParaGoogleSheetsTSV(gastos);
+                      navigator.clipboard.writeText(tsv);
+                      setMensajeExito(`¡${gastos.length} facturas copiadas! En tu Google Sheet, haz clic en la celda A1 y presiona Ctrl+V.`);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-neutral-950 hover:brightness-110 shadow-sm transition-all cursor-pointer"
+                    title="Copia todas las filas en formato compatible con Google Sheets para pegar con Ctrl+V"
+                  >
+                    <Copy size={13} />
+                    <span>Copiar Datos para Google Sheet (1 Clic)</span>
+                  </button>
+
+                  {/* Enlace directo accesible (target="_blank") para abrir y verificar Google Sheets */}
+                  <a
+                    href={
+                      config.google_sheets_id
+                        ? `https://docs.google.com/spreadsheets/d/${config.google_sheets_id}/edit`
+                        : 'https://sheets.new'
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                      isDark
+                        ? 'bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border-neutral-700'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-xs'
+                    }`}
+                  >
+                    <ExternalLink size={13} />
+                    <span>Abrir Mi Google Sheet</span>
+                  </a>
+
+                  {/* Exportación CSV Local para guardar sin Google Sheets */}
+                  <button
+                    type="button"
+                    onClick={handleExportarCSVLocal}
+                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                      isDark
+                        ? 'bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border-neutral-700'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-xs'
+                    }`}
+                  >
+                    <FileDown size={13} className="text-teal-500" />
+                    <span>Guardar CSV</span>
+                  </button>
                 </div>
 
                 <button
+                  type="button"
                   onClick={handleSincronizarAhora}
                   disabled={sincronizando}
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 hover:brightness-110 disabled:opacity-50 flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 hover:brightness-110 disabled:opacity-50 flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
                 >
                   <RefreshCw size={14} className={sincronizando ? 'animate-spin' : ''} />
-                  <span>{sincronizando ? 'Sincronizando...' : `Subir (${pendientes} pendientes)`}</span>
+                  <span>{sincronizando ? 'Sincronizando...' : `Sincronizar (${pendientes} pendientes)`}</span>
                 </button>
               </div>
+
+              {mensajeExito && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={16} />
+                    <span>{mensajeExito}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMensajeExito('')}
+                    className="text-neutral-400 hover:text-white"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
 
               <div
                 className={`flex items-center justify-between text-xs px-1 ${

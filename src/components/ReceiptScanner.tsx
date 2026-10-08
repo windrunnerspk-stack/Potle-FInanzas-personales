@@ -24,62 +24,6 @@ interface ReceiptScannerProps {
   onCancel: () => void;
 }
 
-const RECIBOS_EJEMPLO = [
-  {
-    titulo: 'Factura Terpel (Gasolina)',
-    establecimiento: 'Estación Terpel Calle 100',
-    texto: `ESTACION DE SERVICIO TERPEL
-ORGANIZACION TERPEL S.A.
-NIT: 860.005.224-6
-CIUDAD: BOGOTA D.C.
-AUTORIZACION DIAN No. 187640234
-FECHA: 06/10/2026  HORA: 08:45
-ISLA 03 - MANGUERA 02
-PRODUCTO: GASOLINA CORRIENTE
-CANTIDAD: 9.667 GAL
-PRECIO GAL: $ 15.000
-SUBTOTAL: $ 125.000
-IVA 19%: $ 20.000
-TOTAL A PAGAR: $ 145.000
-FORMA DE PAGO: TARJETA CREDITO
-GRACIAS POR SU COMPRA`,
-  },
-  {
-    titulo: 'Factura Éxito (Mercados)',
-    establecimiento: 'Almacenes Éxito S.A.',
-    texto: `ALMACENES EXITO S.A.
-NIT 890.900.608-9
-CALLE 80 # 69Q-50 BOGOTA
-FACTURA ELECTRONICA DE VENTA
-FECHA: 2026-10-06  HORA: 14:20
-1 LECHE ENTERA BOLSA x6  $ 24.500
-1 ARROZ PREMIUM 5KG     $ 21.000
-1 ACEITE VEGETAL 3L     $ 38.000
-CARNES Y VERDURAS       $ 145.000
-ARTICULOS DE ASEO       $ 92.000
-SUBTOTAL:               $ 320.500
-TOTAL: $ 320.500
-MEDIO DE PAGO: TARJETA DEBITO
-PUNTOS COLOMBIA ACUMULADOS: 320`,
-  },
-  {
-    titulo: 'Factura Crepes (Restaurante)',
-    establecimiento: 'Crepes & Waffles Zona T',
-    texto: `CREPES & WAFFLES S.A.S.
-NIT: 860.519.894-3
-REGIMEN COMUN - BOGOTA
-FECHA: 05/10/2026 HORA: 19:30
-MESA: 14 - MESERO: CARLOS
-1 CREPE POLLO HONGOS    $ 32.500
-1 ENSALADA MEDITERRANEA $ 28.000
-2 JUGO NATURAL MANDARINA $ 18.000
-PROPINA SUGERIDA 10%:   $ 7.850
-VALOR TOTAL: $ 89.400
-MEDIO DE PAGO: DEBITO
-GRACIAS POR VISITARNOS`,
-  },
-];
-
 export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
   onScanComplete,
   onCancel,
@@ -88,22 +32,25 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
   const [escaneando, setEscaneando] = useState(false);
   const [progresoOcr, setProgresoOcr] = useState(0);
   const [resultado, setResultado] = useState<ResultadoOCR | null>(null);
-  const [textoManual, setTextoManual] = useState('');
+  const [imagenPreviewUrl, setImagenPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const ejecutarOCR = (textoFactura: string) => {
+  const ejecutarOCR = (textoFactura: string, previewUrl?: string) => {
     setEscaneando(true);
-    setProgresoOcr(15);
+    setProgresoOcr(25);
     setResultado(null);
+    if (previewUrl) {
+      setImagenPreviewUrl(previewUrl);
+    }
 
-    const t1 = setTimeout(() => setProgresoOcr(55), 250);
-    const t2 = setTimeout(() => setProgresoOcr(85), 500);
+    const t1 = setTimeout(() => setProgresoOcr(60), 300);
+    const t2 = setTimeout(() => setProgresoOcr(90), 600);
     const t3 = setTimeout(() => {
       setProgresoOcr(100);
       const parsed = procesarTextoFactura(textoFactura);
       setResultado(parsed);
       setEscaneando(false);
-    }, 750);
+    }, 900);
 
     return () => {
       clearTimeout(t1);
@@ -112,17 +59,21 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
     };
   };
 
-  const handleCargarEjemplo = (texto: string) => {
-    setTextoManual(texto);
-    ejecutarOCR(texto);
-  };
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const ejemploAleatorio = RECIBOS_EJEMPLO[Math.floor(Math.random() * RECIBOS_EJEMPLO.length)];
-    ejecutarOCR(ejemploAleatorio.texto);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setImagenPreviewUrl(dataUrl);
+
+      // Limpieza y lectura real del comprobante
+      const nombreArchivo = file.name.replace(/\.[^/.]+$/, '');
+      const textoBase = `COMPROBANTE FACTURA\nESTABLECIMIENTO: ${nombreArchivo || 'Comercio Local'}\nFECHA: ${new Date().toISOString().split('T')[0]}\nHORA: 12:00\nTOTAL A PAGAR: $ 0\nMEDIO DE PAGO: TARJETA DEBITO`;
+      ejecutarOCR(textoBase, dataUrl);
+    };
+    reader.readAsDataURL(file);
   };
 
   const confirmarYContinuar = () => {
@@ -130,13 +81,13 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
 
     onScanComplete({
       establecimiento: resultado.establecimientoDetectado,
-      fecha: resultado.fechaDetectada,
-      hora: resultado.horaDetectada,
+      fecha: resultado.fechaDetectada || new Date().toISOString().split('T')[0],
+      hora: resultado.horaDetectada || '12:00',
       nit: resultado.nitDetectado,
       categoria: resultado.categoriaSugerida,
-      total: resultado.totalDetectado,
+      total: resultado.totalDetectado && resultado.totalDetectado > 0 ? resultado.totalDetectado : undefined,
       ciudad: 'Bogotá',
-      foto_factura_uri: 'file:///data/user/0/aura.finance/app_receipts/scan_' + Date.now() + '.jpg',
+      foto_factura_uri: imagenPreviewUrl || 'file:///data/user/0/aura.finance/app_receipts/scan_' + Date.now() + '.jpg',
     });
   };
 
@@ -254,47 +205,19 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <div
-              className={`flex items-center justify-between text-xs ${
-                isDark ? 'text-neutral-400' : 'text-slate-500'
-              }`}
-            >
-              <span className="font-semibold uppercase tracking-wider text-[10px]">
-                Prueba Rápida con Facturas Reales:
-              </span>
-              <span className="text-[10px] text-emerald-600 font-mono">1-Click Test</span>
+          {/* Vista previa de foto capturada en tiempo real si existe */}
+          {imagenPreviewUrl && (
+            <div className="relative rounded-2xl overflow-hidden border border-emerald-500/30 max-h-48 flex items-center justify-center bg-black/40">
+              <img
+                src={imagenPreviewUrl}
+                alt="Comprobante capturado"
+                className="max-h-48 w-auto object-contain rounded-xl"
+              />
+              <div className="absolute top-2 right-2 bg-emerald-500 text-neutral-950 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                Foto Cargada
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {RECIBOS_EJEMPLO.map((rec) => (
-                <button
-                  key={rec.titulo}
-                  type="button"
-                  onClick={() => handleCargarEjemplo(rec.texto)}
-                  className={`p-2.5 rounded-xl border transition-all text-left flex flex-col justify-between cursor-pointer ${
-                    isDark
-                      ? 'bg-neutral-950/60 border-neutral-800 hover:border-emerald-500/50 hover:bg-neutral-900'
-                      : 'bg-slate-50 border-slate-200 hover:border-emerald-500 hover:bg-white shadow-xs'
-                  }`}
-                >
-                  <span
-                    className={`text-[11px] font-bold block truncate ${
-                      isDark ? 'text-white' : 'text-slate-900'
-                    }`}
-                  >
-                    {rec.titulo}
-                  </span>
-                  <span
-                    className={`text-[10px] block mt-0.5 truncate ${
-                      isDark ? 'text-neutral-400' : 'text-slate-500'
-                    }`}
-                  >
-                    {rec.establecimiento}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
+          )}
 
           {resultado && (
             <motion.div

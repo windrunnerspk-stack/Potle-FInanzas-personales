@@ -3,7 +3,7 @@ import {
   CategoriaGasto,
   MetodoPago,
   LISTA_CATEGORIAS_DEFAULT,
-  CATEGORIAS_CONFIG_DEFAULT
+  CATEGORIAS_CONFIG_DEFAULT,
 } from '../types/finance';
 
 export interface ResultadoImportacion {
@@ -15,6 +15,85 @@ export interface ResultadoImportacion {
   conteoPorCategoria: Record<string, number>;
   errores: string[];
   advertencias: string[];
+}
+
+// Lista de ciudades colombianas para detección precisa y normalización
+export const CIUDADES_COLOMBIANAS: Record<string, string> = {
+  cucuta: 'Cúcuta',
+  'santa marta': 'Santa Marta',
+  santamarta: 'Santa Marta',
+  bogota: 'Bogotá',
+  medellin: 'Medellín',
+  cali: 'Cali',
+  barranquilla: 'Barranquilla',
+  cartagena: 'Cartagena',
+  bucaramanga: 'Bucaramanga',
+  pereira: 'Pereira',
+  manizales: 'Manizales',
+  ibague: 'Ibagué',
+  villavicencio: 'Villavicencio',
+  pasto: 'Pasto',
+  armenia: 'Armenia',
+  valledupar: 'Valledupar',
+  monteria: 'Montería',
+  sincelejo: 'Sincelejo',
+  popayan: 'Popayán',
+  tunja: 'Tunja',
+  riohacha: 'Riohacha',
+  florencia: 'Florencia',
+  yopal: 'Yopal',
+  quibdo: 'Quibdó',
+  neiva: 'Neiva',
+  soacha: 'Soacha',
+  bello: 'Bello',
+  palmira: 'Palmira',
+  envigado: 'Envigado',
+  itagui: 'Itagüí',
+  floridablanca: 'Floridablanca',
+  giron: 'Girón',
+  piedecuesta: 'Piedecuesta',
+  dosquebradas: 'Dosquebradas',
+  soledad: 'Soledad',
+  chia: 'Chía',
+  zipaquira: 'Zipaquirá',
+  rionegro: 'Rionegro',
+  barrancabermeja: 'Barrancabermeja',
+  duitama: 'Duitama',
+  sogamoso: 'Sogamoso',
+  girardot: 'Girardot',
+  tulua: 'Tuluá',
+  cartago: 'Cartago',
+  ipiales: 'Ipiales',
+  'los patios': 'Los Patios',
+  'villa del rosario': 'Villa del Rosario',
+};
+
+/**
+ * Normaliza cualquier texto de ciudad (en especial Santa Marta y Cúcuta)
+ */
+export function normalizarCiudad(ciudadRaw?: any): string {
+  if (!ciudadRaw || typeof ciudadRaw !== 'string') return 'Bogotá';
+  const raw = ciudadRaw.trim();
+  if (!raw) return 'Bogotá';
+
+  const limpio = raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
+  // Buscar coincidencia en diccionario de ciudades colombianas
+  for (const [clave, nombreOficial] of Object.entries(CIUDADES_COLOMBIANAS)) {
+    if (limpio === clave || limpio.includes(clave)) {
+      return nombreOficial;
+    }
+  }
+
+  // Devolver con formato Capital Case si no está en la lista estándar
+  return raw
+    .split(' ')
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(' ');
 }
 
 /**
@@ -45,7 +124,7 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
-  // 2. Mapeos directos comunes y variantes
+  // 2. Mapeos directos comunes y variantes colombianas
   const MAPEO_DIRECTO: Record<string, CategoriaGasto> = {
     // Mercado
     mercado: 'Mercado',
@@ -56,6 +135,8 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     fruver: 'Mercado',
     despensa: 'Mercado',
     comestibles: 'Mercado',
+    alimentos: 'Mercado',
+    abarrotes: 'Mercado',
 
     // Gasolina
     gasolina: 'Gasolina',
@@ -63,6 +144,8 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     combustible: 'Gasolina',
     estacion: 'Gasolina',
     acpm: 'Gasolina',
+    tanqueada: 'Gasolina',
+    tanque: 'Gasolina',
 
     // Snacks
     snack: 'Snacks',
@@ -74,6 +157,7 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     panaderia: 'Snacks',
     cafe: 'Snacks',
     cafeteria: 'Snacks',
+    helado: 'Snacks',
 
     // Caridad
     caridad: 'Caridad',
@@ -81,6 +165,8 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     donaciones: 'Caridad',
     ong: 'Caridad',
     fundacion: 'Caridad',
+    limosna: 'Caridad',
+    ayuda: 'Caridad',
 
     // Cumpleaños
     cumpleanos: 'Cumpleaños',
@@ -88,6 +174,8 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     cumpleanios: 'Cumpleaños',
     regalos: 'Cumpleaños',
     regalo: 'Cumpleaños',
+    torta: 'Cumpleaños',
+    fiesta: 'Cumpleaños',
 
     // Crypto
     crypto: 'Crypto',
@@ -97,6 +185,7 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     bitcoin: 'Crypto',
     btc: 'Crypto',
     binance: 'Crypto',
+    usdt: 'Crypto',
 
     // Apuestas
     apuestas: 'Apuestas',
@@ -104,6 +193,8 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     casino: 'Apuestas',
     loteria: 'Apuestas',
     chance: 'Apuestas',
+    betplay: 'Apuestas',
+    wplay: 'Apuestas',
 
     // Videojuegos
     videojuegos: 'Videojuegos',
@@ -111,6 +202,8 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     gaming: 'Videojuegos',
     games: 'Videojuegos',
     juegos: 'Videojuegos',
+    playstation: 'Videojuegos',
+    steam: 'Videojuegos',
 
     // Restaurantes
     restaurantes: 'Restaurantes',
@@ -120,15 +213,18 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     almuerzos: 'Restaurantes',
     cena: 'Restaurantes',
     desayuno: 'Restaurantes',
+    comidas: 'Restaurantes',
 
     // Transporte
     transporte: 'Transporte',
     taxi: 'Transporte',
     uber: 'Transporte',
+    didi: 'Transporte',
     bus: 'Transporte',
     pasajes: 'Transporte',
     peaje: 'Transporte',
     peajes: 'Transporte',
+    transmilenio: 'Transporte',
 
     // Vivienda
     vivienda: 'Vivienda',
@@ -144,8 +240,10 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     'servicios publicos': 'Servicios',
     luz: 'Servicios',
     agua: 'Servicios',
+    gas_domiciliario: 'Servicios',
     internet: 'Servicios',
     energia: 'Servicios',
+    telefonia: 'Servicios',
 
     // Salud
     salud: 'Salud',
@@ -156,6 +254,7 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     eps: 'Salud',
     hospital: 'Salud',
     clinica: 'Salud',
+    medicamentos: 'Salud',
 
     // Entretenimiento
     entretenimiento: 'Entretenimiento',
@@ -163,6 +262,7 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     cine: 'Entretenimiento',
     concierto: 'Entretenimiento',
     diversion: 'Entretenimiento',
+    boletas: 'Entretenimiento',
 
     // Compras
     compras: 'Compras',
@@ -177,6 +277,7 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     vuelo: 'Viajes',
     hotel: 'Viajes',
     vacaciones: 'Viajes',
+    hospedaje: 'Viajes',
 
     // Taller
     taller: 'Taller',
@@ -184,6 +285,8 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     repuestos: 'Taller',
     mantenimiento: 'Taller',
     auto: 'Taller',
+    moto: 'Taller',
+    llantas: 'Taller',
 
     // Educación
     educacion: 'Educación',
@@ -192,6 +295,7 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     cursos: 'Educación',
     curso: 'Educación',
     estudios: 'Educación',
+    matricula: 'Educación',
 
     // Suscripciones
     suscripciones: 'Suscripciones',
@@ -207,6 +311,7 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     celular: 'Tecnología',
     gadgets: 'Tecnología',
     software: 'Tecnología',
+    hardware: 'Tecnología',
 
     // Ropa
     ropa: 'Ropa',
@@ -227,6 +332,7 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
     varios: 'Otros',
     gastos: 'Otros',
     gasto: 'Otros',
+    general: 'Otros',
   };
 
   if (MAPEO_DIRECTO[limpio]) {
@@ -242,14 +348,13 @@ export function normalizarCategoria(categoriaRaw?: string): CategoriaGasto {
           .toLowerCase()
           .normalize('NFD')
           .replace(/[\u0300-\u036f]/g, '');
-        if (limpio.includes(kwLimpio) || kwLimpio.includes(limpio)) {
+        if (limpio === kwLimpio || limpio.includes(kwLimpio) || kwLimpio.includes(limpio)) {
           return catName;
         }
       }
     }
   }
 
-  // Fallback seguro sin fallar jamás
   return 'Otros';
 }
 
@@ -273,27 +378,20 @@ export function normalizarMonto(montoRaw: any): number {
   if (!str) return 0;
 
   // Manejo de formatos de miles y decimales
-  // Si contiene tanto punto como coma:
   if (str.includes('.') && str.includes(',')) {
-    // Ejemplo "145.000,50" -> miles punto, decimal coma
     if (str.lastIndexOf(',') > str.lastIndexOf('.')) {
       str = str.replace(/\./g, '').replace(',', '.');
     } else {
-      // Ejemplo "145,000.50" -> miles coma, decimal punto
       str = str.replace(/,/g, '');
     }
   } else if (str.includes('.')) {
-    // Si tiene puntos: puede ser miles "145.000" o decimal "145.50"
     const partes = str.split('.');
     if (partes.length > 2) {
-      // Múltiples puntos: "1.250.000" -> separador de miles
       str = str.replace(/\./g, '');
     } else if (partes[1] && partes[1].length === 3) {
-      // 3 decimales: típicamente miles en COP/España (ej: 145.000)
       str = str.replace(/\./g, '');
     }
   } else if (str.includes(',')) {
-    // Si tiene comas: puede ser miles "145,000" o decimal "145,50"
     const partes = str.split(',');
     if (partes.length > 2) {
       str = str.replace(/,/g, '');
@@ -315,7 +413,7 @@ export function normalizarFecha(fechaRaw?: any): string {
   const hoyStr = new Date().toISOString().split('T')[0];
   if (!fechaRaw) return hoyStr;
 
-  // Si es un número serial de Excel (e.g. 46299)
+  // Serial de Excel (e.g. 46299)
   if (typeof fechaRaw === 'number' || (!isNaN(Number(fechaRaw)) && Number(fechaRaw) > 30000 && Number(fechaRaw) < 60000)) {
     const serial = Number(fechaRaw);
     const fechaExcel = new Date((serial - 25569) * 86400 * 1000);
@@ -328,7 +426,7 @@ export function normalizarFecha(fechaRaw?: any): string {
 
   // Formato YYYY-MM-DD
   if (/^\d{4}-\d{1,2}-\d{1,2}/.test(str)) {
-    const partes = str.split('T')[0].split('-');
+    const partes = str.split('T')[0].split(' ')[0].split('-');
     const y = partes[0];
     const m = partes[1].padStart(2, '0');
     const d = partes[2].padStart(2, '0');
@@ -345,7 +443,6 @@ export function normalizarFecha(fechaRaw?: any): string {
     if (anio.length === 2) {
       anio = `20${anio}`;
     }
-    // Si mes es mayor a 12 pero dia <= 12, intercambiar (MM/DD/YYYY)
     if (Number(mes) > 12 && Number(dia) <= 12) {
       const temp = dia;
       dia = mes;
@@ -354,7 +451,6 @@ export function normalizarFecha(fechaRaw?: any): string {
     return `${anio}-${mes}-${dia}`;
   }
 
-  // Intentar parseo nativo
   const parsed = new Date(str);
   if (!isNaN(parsed.getTime())) {
     return parsed.toISOString().split('T')[0];
@@ -384,7 +480,6 @@ export function parsearLineasCSV(texto: string, delimitador?: string): string[][
   const lineas: string[][] = [];
   if (!texto || !texto.trim()) return lineas;
 
-  // Auto-detectar delimitador si no se especificó
   let delim = delimitador;
   if (!delim) {
     const primeraLinea = texto.split(/\r?\n/)[0] || '';
@@ -435,9 +530,11 @@ export function parsearLineasCSV(texto: string, delimitador?: string): string[][
 }
 
 /**
- * Detecta qué columna corresponde a qué campo
+ * Detecta qué columna corresponde a qué campo.
+ * Mapea con precisión las 18 columnas de Google Sheets indicadas por el usuario:
+ * ID | Fecha | Hora | Establecimiento | NIT | Ciudad | Categoría | Subcategoría | Método de pago | Subtotal | IVA | Descuento | Propina | Total | Observaciones | Imagen (Drive) | Fecha de registro | MesAño
  */
-function identificarColumnas(headers: string[]): Record<string, number> {
+export function identificarColumnas(headers: string[]): Record<string, number> {
   const mapa: Record<string, number> = {};
 
   const nombresLimpios = headers.map((h) =>
@@ -445,68 +542,153 @@ function identificarColumnas(headers: string[]): Record<string, number> {
   );
 
   nombresLimpios.forEach((h, idx) => {
-    // Fecha
-    if (h.includes('fecha') || h === 'date' || h === 'dia' || h === 'tiempo' || h === 'f.') {
-      if (mapa.fecha === undefined) mapa.fecha = idx;
+    // 1. ID de la factura / registro
+    if ((h === 'id' || h === '#' || h === 'nro' || h === 'codigo') && mapa.id === undefined) {
+      mapa.id = idx;
     }
-    // Hora
-    else if (h.includes('hora') || h === 'time' || h === 'hr') {
-      if (mapa.hora === undefined) mapa.hora = idx;
-    }
-    // Establecimiento / Comercio / Lugar
+    // 2. Subcategoría (debe verificarse antes de categoría)
     else if (
-      h.includes('establecimiento') ||
-      h.includes('comercio') ||
-      h.includes('lugar') ||
-      h.includes('negocio') ||
-      h.includes('tienda') ||
-      h.includes('proveedor') ||
-      h.includes('concepto') ||
-      h.includes('descripcion') ||
-      h.includes('nombre') ||
-      h.includes('detalle') ||
-      h.includes('item')
+      (h.includes('subcategoria') || h.includes('sub-cat') || h.includes('sub cat') || h.includes('sub_cat')) &&
+      mapa.subcategoria === undefined
     ) {
-      if (mapa.establecimiento === undefined) mapa.establecimiento = idx;
+      mapa.subcategoria = idx;
     }
-    // NIT / Factura
-    else if (h.includes('nit') || h.includes('rut') || h.includes('factura') || h.includes('nro') || h.includes('ticket')) {
-      if (mapa.nit === undefined) mapa.nit = idx;
-    }
-    // Categoría
+    // 3. Categoría (estricto: no subcategoría)
     else if (
-      h.includes('categoria') ||
-      h.includes('category') ||
-      h.includes('rubro') ||
-      h.includes('clasificacion') ||
-      h.includes('tipo')
+      (h.includes('categoria') || h.includes('category') || h.includes('rubro') || h.includes('clasificacion')) &&
+      !h.includes('sub') &&
+      mapa.categoria === undefined
     ) {
-      if (mapa.categoria === undefined) mapa.categoria = idx;
+      mapa.categoria = idx;
     }
-    // Método de pago
-    else if (h.includes('metodo') || h.includes('medio') || h.includes('pago') || h.includes('forma')) {
-      if (mapa.metodo_pago === undefined) mapa.metodo_pago = idx;
-    }
-    // Ciudad / Ubicación
-    else if (h.includes('ciudad') || h.includes('city') || h.includes('ubicacion') || h.includes('lugar')) {
-      if (mapa.ciudad === undefined) mapa.ciudad = idx;
-    }
-    // Total / Monto / Valor
+    // 4. Subtotal (estricto: antes de total)
     else if (
-      h.includes('total') ||
-      h.includes('monto') ||
-      h.includes('valor') ||
-      h.includes('precio') ||
-      h.includes('importe') ||
-      h.includes('costo') ||
-      h.includes('gasto') ||
-      h.includes('amount')
+      (h.includes('subtotal') || h.includes('sub-total') || h.includes('sub_total')) &&
+      mapa.subtotal === undefined
     ) {
-      if (mapa.total === undefined) mapa.total = idx;
+      mapa.subtotal = idx;
     }
-    // Observaciones / Notas
-    else if (h.includes('observacion') || h.includes('nota') || h.includes('comentario')) {
-      if (mapa.observaciones === undefined) mapa.observaciones = idx;
+    // 5. IVA / Impuesto
+    else if (
+      (h === 'iva' || h.includes('impuesto') || h.includes('tax') || h.includes('iva 19')) &&
+      mapa.iva === undefined
+    ) {
+      mapa.iva = idx;
+    }
+    // 6. Descuento
+    else if (
+      (h.includes('descuento') || h.includes('dcto') || h.includes('discount')) &&
+      mapa.descuento === undefined
+    ) {
+      mapa.descuento = idx;
+    }
+    // 7. Propina
+    else if (
+      (h.includes('propina') || h.includes('tip')) &&
+      mapa.propina === undefined
+    ) {
+      mapa.propina = idx;
+    }
+    // 8. Total final a pagar (estricto: NO subtotal)
+    else if (
+      !h.includes('subtotal') &&
+      !h.includes('sub_total') &&
+      (h === 'total' ||
+        h === 'valor total' ||
+        h === 'monto total' ||
+        h === 'total factura' ||
+        h === 'a pagar' ||
+        h === 'importe total' ||
+        h === 'costo total' ||
+        h === 'monto' ||
+        h === 'importe' ||
+        (h.includes('total') && !h.includes('sub'))) &&
+      mapa.total === undefined
+    ) {
+      mapa.total = idx;
+    }
+    // 9. Fecha de Registro / Creación (separado de Fecha del gasto)
+    else if (
+      (h.includes('registro') || h.includes('creacion') || h.includes('fecha de registro')) &&
+      mapa.fecha_registro === undefined
+    ) {
+      mapa.fecha_registro = idx;
+    }
+    // 10. Fecha del gasto (excluyendo fecha de registro)
+    else if (
+      (h === 'fecha' ||
+        h === 'date' ||
+        h === 'dia' ||
+        h === 'tiempo' ||
+        h === 'f.' ||
+        (h.includes('fecha') && !h.includes('registro') && !h.includes('creacion'))) &&
+      mapa.fecha === undefined
+    ) {
+      mapa.fecha = idx;
+    }
+    // 11. Hora
+    else if (
+      (h === 'hora' || h === 'time' || h === 'hr' || h.startsWith('hora')) &&
+      mapa.hora === undefined
+    ) {
+      mapa.hora = idx;
+    }
+    // 12. Establecimiento / Comercio / Lugar
+    else if (
+      (h.includes('establecimiento') ||
+        h.includes('comercio') ||
+        h.includes('lugar') ||
+        h.includes('negocio') ||
+        h.includes('tienda') ||
+        h.includes('proveedor') ||
+        h.includes('empresa') ||
+        h.includes('razon') ||
+        (h.includes('nombre') && !h.includes('archivo') && !h.includes('usuario'))) &&
+      mapa.establecimiento === undefined
+    ) {
+      mapa.establecimiento = idx;
+    }
+    // 13. NIT / RUT / Cédula
+    else if (
+      (h === 'nit' || h === 'rut' || h === 'rfc' || h.includes('nit') || h.includes('cedula') || (h.includes('factura') && !h.includes('total'))) &&
+      mapa.nit === undefined
+    ) {
+      mapa.nit = idx;
+    }
+    // 14. Ciudad / Municipio / Ubicación (ej: Santa Marta, Cúcuta)
+    else if (
+      (h.includes('ciudad') || h.includes('city') || h.includes('municipio') || h.includes('ubicacion')) &&
+      mapa.ciudad === undefined
+    ) {
+      mapa.ciudad = idx;
+    }
+    // 15. Método de pago
+    else if (
+      (h.includes('metodo') || h.includes('medio') || h.includes('forma') || (h.includes('pago') && !h.includes('total'))) &&
+      mapa.metodo_pago === undefined
+    ) {
+      mapa.metodo_pago = idx;
+    }
+    // 16. Imagen (Drive) / Comprobante
+    else if (
+      (h.includes('imagen') || h.includes('drive') || h.includes('foto') || h.includes('comprobante') || h.includes('recibo')) &&
+      mapa.imagen_drive === undefined
+    ) {
+      mapa.imagen_drive = idx;
+    }
+    // 17. MesAño / Periodo
+    else if (
+      (h.includes('mes') || h.includes('periodo') || h.includes('mesano')) &&
+      mapa.mes_ano === undefined
+    ) {
+      mapa.mes_ano = idx;
+    }
+    // 18. Observaciones / Notas
+    else if (
+      (h.includes('observacion') || h.includes('observaciones') || h.includes('nota') || h.includes('comentario') || h.includes('detalle')) &&
+      mapa.observaciones === undefined
+    ) {
+      mapa.observaciones = idx;
     }
   });
 
@@ -514,8 +696,10 @@ function identificarColumnas(headers: string[]): Record<string, number> {
 }
 
 /**
- * Función principal para procesar cualquier texto o contenido de Google Sheets
- * y cargarlo a la aplicación sin errores.
+ * Función principal para procesar cualquier texto o enlace de Google Sheets
+ * Soporta de forma nativa la estructura oficial de 18 columnas:
+ * ID | Fecha | Hora | Establecimiento | NIT | Ciudad | Categoría | Subcategoría | Método de pago | Subtotal | IVA | Descuento | Propina | Total | Observaciones | Imagen (Drive) | Fecha de registro | MesAño
+ * Y también la variante de 14 columnas que inicia con A: Fecha, B: Hora, C: Establecimiento, D: NIT, etc.
  */
 export function procesarImportacionGoogleSheets(textoCrudo: string): ResultadoImportacion {
   const errores: string[] = [];
@@ -552,67 +736,140 @@ export function procesarImportacionGoogleSheets(textoCrudo: string): ResultadoIm
     };
   }
 
-  // Identificar si la fila 0 es un encabezado
+  // 1. Detección Inteligente del Encabezado explorando las primeras 15 filas
   let filaInicio = 0;
-  let mapaColumnas = identificarColumnas(filas[0]);
+  let mapaColumnas: Record<string, number> = {};
+  let indiceEncabezadoEncontrado = -1;
 
-  // Si encontramos al menos 2 columnas clave reconocidas en la primera fila, es un encabezado
-  const columnasClaveEncontradas = [
-    mapaColumnas.total !== undefined,
-    mapaColumnas.fecha !== undefined,
-    mapaColumnas.establecimiento !== undefined,
-    mapaColumnas.categoria !== undefined,
-  ].filter(Boolean).length;
+  for (let r = 0; r < Math.min(filas.length, 15); r++) {
+    const mapaPrueba = identificarColumnas(filas[r]);
+    const clavesDetectadas = [
+      mapaPrueba.establecimiento !== undefined,
+      mapaPrueba.categoria !== undefined,
+      mapaPrueba.total !== undefined,
+      mapaPrueba.hora !== undefined,
+      mapaPrueba.ciudad !== undefined,
+      mapaPrueba.nit !== undefined,
+      mapaPrueba.fecha !== undefined,
+      mapaPrueba.subtotal !== undefined,
+      mapaPrueba.metodo_pago !== undefined,
+    ].filter(Boolean).length;
 
-  if (columnasClaveEncontradas >= 2) {
-    filaInicio = 1;
-  } else {
-    // Si la primera fila no parece encabezado, revisar fila 1
-    if (filas.length > 1) {
-      const mapaFila1 = identificarColumnas(filas[1]);
-      if (
-        [mapaFila1.total !== undefined, mapaFila1.fecha !== undefined, mapaFila1.establecimiento !== undefined].filter(
-          Boolean
-        ).length >= 2
-      ) {
-        mapaColumnas = mapaFila1;
-        filaInicio = 2;
-      }
+    if (clavesDetectadas >= 2) {
+      mapaColumnas = mapaPrueba;
+      indiceEncabezadoEncontrado = r;
+      filaInicio = r + 1;
+      break;
     }
+  }
 
-    // Si aún no hay encabezados, inferir posiciones por orden estándar:
-    // Fecha(0), Hora(1), Establecimiento(2), NIT(3), Categoría(4), Método(5), Ciudad(6), Total(7), Observaciones(8)
-    if (mapaColumnas.total === undefined && mapaColumnas.establecimiento === undefined) {
-      advertencias.push('No se detectaron nombres de columnas explícitos. Se utilizó el mapeo inteligente por posición.');
+  // 2. Si no se encontró fila de encabezado explícita, aplicar inferencia inteligente por orden y contenido
+  if (indiceEncabezadoEncontrado === -1) {
+    const primeraFila = filas[0] || [];
+    const numCols = primeraFila.length;
+
+    // Verificar si la columna 0 es ID o Fecha
+    const col0 = String(primeraFila[0] || '').trim();
+    const col1 = String(primeraFila[1] || '').trim();
+
+    const col1EsFecha = /(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/.test(col1);
+    const col0EsFecha = /(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/.test(col0);
+
+    // Formato 1: 18 columnas con ID en columna 0
+    // ID | Fecha | Hora | Establecimiento | NIT | Ciudad | Categoría | Subcategoría | Método | Subtotal | IVA | Dcto | Propina | Total | Observaciones | Imagen | Registro | MesAño
+    if (numCols >= 16 || col1EsFecha) {
+      mapaColumnas = {
+        id: 0,
+        fecha: 1,
+        hora: 2,
+        establecimiento: 3,
+        nit: 4,
+        ciudad: 5,
+        categoria: 6,
+        subcategoria: 7,
+        metodo_pago: 8,
+        subtotal: 9,
+        iva: 10,
+        descuento: 11,
+        propina: 12,
+        total: 13,
+        observaciones: 14,
+        imagen_drive: 15,
+        fecha_registro: 16,
+        mes_ano: 17,
+      };
+      advertencias.push(
+        'Se aplicó la estructura oficial de 18 columnas (ID, Fecha, Hora, Establecimiento, NIT, Ciudad, Categoría, Subcategoría, Método, Subtotal, IVA, Descuento, Propina, Total, Observaciones, Imagen, Fecha de registro, MesAño).'
+      );
+      filaInicio = 0;
+    }
+    // Formato 2: 14 columnas que inician con A: Fecha, B: Hora, C: Establecimiento, D: NIT, E: Ciudad, F: Categoría...
+    else if (col0EsFecha || numCols >= 10) {
       mapaColumnas = {
         fecha: 0,
         hora: 1,
         establecimiento: 2,
         nit: 3,
-        categoria: 4,
-        metodo_pago: 5,
-        ciudad: 6,
-        total: 7,
-        observaciones: 8,
+        ciudad: 4,
+        categoria: 5,
+        subcategoria: 6,
+        metodo_pago: 7,
+        subtotal: 8,
+        iva: 9,
+        descuento: 10,
+        propina: 11,
+        total: 12,
+        observaciones: 13,
       };
+      advertencias.push(
+        'Se aplicó la estructura directa de 14 columnas (A: Fecha, B: Hora, C: Establecimiento, D: NIT, E: Ciudad, F: Categoría, G: Subcategoría, H: Método, I: Subtotal, J: IVA, K: Descuento, L: Propina, M: Total, N: Observaciones).'
+      );
+      filaInicio = 0;
+    } else {
+      // Fallback básico
+      mapaColumnas = {
+        fecha: 0,
+        hora: 1,
+        establecimiento: 2,
+        nit: 3,
+        ciudad: 4,
+        categoria: 5,
+        metodo_pago: 6,
+        total: numCols - 1,
+      };
+      filaInicio = 0;
     }
   }
 
-  // Si aún no tenemos mapeado 'total', buscar qué columna tiene números en las filas
+  // Garantizar que 'total' esté asignado sin colisionar con NIT ni ID
   if (mapaColumnas.total === undefined) {
-    const numCols = filas[filaInicio]?.length || 0;
-    for (let c = numCols - 1; c >= 0; c--) {
-      const celda = filas[filaInicio]?.[c];
-      if (celda && normalizarMonto(celda) > 0) {
-        mapaColumnas.total = c;
-        break;
-      }
+    if (mapaColumnas.id === 0 && mapaColumnas.fecha === 1) {
+      mapaColumnas.total = 13;
+    } else if (mapaColumnas.fecha === 0) {
+      mapaColumnas.total = 12;
+    } else {
+      mapaColumnas.total = filas[filaInicio]?.length ? filas[filaInicio].length - 1 : 13;
     }
   }
 
-  // Si no tenemos establecimiento, buscar la primera columna de texto largo
+  // Garantizar que establecimiento esté asignado correctamente
   if (mapaColumnas.establecimiento === undefined) {
-    mapaColumnas.establecimiento = 2 < (filas[filaInicio]?.length || 0) ? 2 : 0;
+    if (mapaColumnas.id === 0) {
+      mapaColumnas.establecimiento = 3;
+    } else if (mapaColumnas.fecha === 0) {
+      mapaColumnas.establecimiento = 2;
+    } else {
+      mapaColumnas.establecimiento = 1;
+    }
+  }
+
+  // Garantizar que ciudad esté asignada correctamente (Santa Marta / Cúcuta)
+  if (mapaColumnas.ciudad === undefined) {
+    if (mapaColumnas.id === 0) {
+      mapaColumnas.ciudad = 5;
+    } else if (mapaColumnas.fecha === 0) {
+      mapaColumnas.ciudad = 4;
+    }
   }
 
   const gastosParseados: Gasto[] = [];
@@ -625,70 +882,154 @@ export function procesarImportacionGoogleSheets(textoCrudo: string): ResultadoIm
       continue;
     }
 
-    // 1. Extraer o inferir monto total
-    const totalRaw = mapaColumnas.total !== undefined ? fila[mapaColumnas.total] : '';
-    let total = normalizarMonto(totalRaw);
+    // A. Filtrado silencioso de filas de resumen o subtotales acumulados
+    const filaTextoUnido = fila.join(' ').toLowerCase();
+    const esFilaResumen =
+      filaTextoUnido.includes('total general') ||
+      filaTextoUnido.includes('panel de control') ||
+      filaTextoUnido.includes('resumen de gastos') ||
+      filaTextoUnido.includes('totales:') ||
+      filaTextoUnido.includes('promedio:') ||
+      (fila[0] && ['total', 'totales', 'suma', 'subtotal general'].includes(fila[0].trim().toLowerCase()));
 
-    // Si el total dio 0 pero hay alguna otra celda que parece monto, buscarla
-    if (total === 0) {
-      for (let c = 0; c < fila.length; c++) {
-        const val = normalizarMonto(fila[c]);
-        if (val > 100) {
-          total = val;
-          break;
+    if (esFilaResumen) {
+      continue;
+    }
+
+    // B. Extraer Total de forma estricta (¡NUNCA tomar el NIT ni el ID como total!)
+    let total = 0;
+    if (mapaColumnas.total !== undefined && fila[mapaColumnas.total] !== undefined) {
+      total = normalizarMonto(fila[mapaColumnas.total]);
+    }
+
+    // Si total dio 0 pero tenemos subtotal disponible: Total = Subtotal + IVA + Propina - Descuento
+    if (total === 0 && mapaColumnas.subtotal !== undefined && fila[mapaColumnas.subtotal] !== undefined) {
+      const subtotal = normalizarMonto(fila[mapaColumnas.subtotal]);
+      const iva = mapaColumnas.iva !== undefined ? normalizarMonto(fila[mapaColumnas.iva]) : 0;
+      const propina = mapaColumnas.propina !== undefined ? normalizarMonto(fila[mapaColumnas.propina]) : 0;
+      const descuento = mapaColumnas.descuento !== undefined ? normalizarMonto(fila[mapaColumnas.descuento]) : 0;
+      total = subtotal + iva + propina - descuento;
+      if (total === 0 && subtotal > 0) {
+        total = subtotal;
+      }
+    }
+
+    // C. Extraer Categoría
+    const categoriaRaw = mapaColumnas.categoria !== undefined ? fila[mapaColumnas.categoria] : '';
+    const categoria = normalizarCategoria(categoriaRaw);
+
+    // D. Extraer Establecimiento con validación para que no absorba ciudades ni fechas
+    let establecimiento = mapaColumnas.establecimiento !== undefined ? fila[mapaColumnas.establecimiento] : '';
+    establecimiento = String(establecimiento || '').trim();
+
+    // Si el establecimiento vino vacío o es solo una fecha/hora/NIT
+    if (
+      !establecimiento ||
+      /^\d{4}-\d{2}-\d{2}/.test(establecimiento) ||
+      /^\d{1,2}:\d{2}/.test(establecimiento) ||
+      /^\d{8,11}/.test(establecimiento)
+    ) {
+      if (total === 0) continue; // Fila sin datos válidos
+      establecimiento = `Factura ${categoria}`;
+    }
+
+    // E. Extraer Fecha
+    let fecha = hoyStr;
+    if (mapaColumnas.fecha !== undefined && fila[mapaColumnas.fecha]) {
+      fecha = normalizarFecha(fila[mapaColumnas.fecha]);
+    } else {
+      for (const celda of fila) {
+        if (celda && /(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/.test(String(celda).trim())) {
+          const normal = normalizarFecha(celda);
+          if (normal) {
+            fecha = normal;
+            break;
+          }
         }
       }
     }
 
-    // 2. Extraer o normalizar categoría
-    const categoriaRaw = mapaColumnas.categoria !== undefined ? fila[mapaColumnas.categoria] : '';
-    const categoria = normalizarCategoria(categoriaRaw);
-
-    // 3. Extraer establecimiento
-    let establecimiento = mapaColumnas.establecimiento !== undefined ? fila[mapaColumnas.establecimiento] : '';
-    if (!establecimiento || !establecimiento.trim()) {
-      establecimiento = `Factura ${categoria}`;
-    }
-
-    // 4. Extraer fecha
-    const fechaRaw = mapaColumnas.fecha !== undefined ? fila[mapaColumnas.fecha] : '';
-    const fecha = normalizarFecha(fechaRaw);
-
-    // 5. Extraer hora
+    // F. Extraer Hora
     let hora = mapaColumnas.hora !== undefined ? fila[mapaColumnas.hora] : '';
-    if (!hora || !/^\d{1,2}:\d{2}/.test(hora.trim())) {
+    if (!hora || !/^\d{1,2}:\d{2}/.test(String(hora).trim())) {
       hora = '12:00';
     } else {
-      hora = hora.trim().slice(0, 5);
+      hora = String(hora).trim().slice(0, 5);
     }
 
-    // 6. Extraer NIT (opcional)
+    // G. Extraer NIT (ej: 860.005.224-6, 900.254.123-1)
     const nit = (mapaColumnas.nit !== undefined ? fila[mapaColumnas.nit] : '') || '';
 
-    // 7. Extraer Ciudad (Cúcuta por defecto)
-    const ciudad = (mapaColumnas.ciudad !== undefined ? fila[mapaColumnas.ciudad] : '') || 'Cúcuta';
+    // H. Extraer Ciudad (Cúcuta, Santa Marta, Bogotá, etc.)
+    let ciudadRaw = mapaColumnas.ciudad !== undefined ? fila[mapaColumnas.ciudad] : '';
+    // Si la celda de ciudad está vacía, buscar si alguna celda contiene Santa Marta o Cúcuta
+    if (!ciudadRaw) {
+      for (const c of fila) {
+        const valLimpio = String(c || '').toLowerCase();
+        if (valLimpio.includes('santa marta') || valLimpio.includes('cucuta')) {
+          ciudadRaw = c;
+          break;
+        }
+      }
+    }
+    const ciudad = normalizarCiudad(ciudadRaw);
 
-    // 8. Extraer Método de Pago
+    // I. Extraer Método de Pago
     const metodoRaw = mapaColumnas.metodo_pago !== undefined ? fila[mapaColumnas.metodo_pago] : '';
     const metodo_pago = normalizarMetodoPago(metodoRaw);
 
-    // 9. Extraer Observaciones
-    const observaciones = (mapaColumnas.observaciones !== undefined ? fila[mapaColumnas.observaciones] : '') || '';
+    // J. Extraer Imagen Drive si viene disponible
+    let foto_factura_uri: string | undefined = undefined;
+    if (mapaColumnas.imagen_drive !== undefined && fila[mapaColumnas.imagen_drive]) {
+      const link = String(fila[mapaColumnas.imagen_drive]).trim();
+      if (link.startsWith('http://') || link.startsWith('https://') || link.startsWith('data:image')) {
+        foto_factura_uri = link;
+      }
+    }
 
-    const id = `gsheet_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`;
+    // K. Construir Observaciones integrando Subcategoría, IVA, Propina y Periodo
+    const partesObs: string[] = [];
+    if (mapaColumnas.observaciones !== undefined && fila[mapaColumnas.observaciones]?.trim()) {
+      partesObs.push(fila[mapaColumnas.observaciones].trim());
+    }
+    if (mapaColumnas.subcategoria !== undefined && fila[mapaColumnas.subcategoria]?.trim()) {
+      const subcat = fila[mapaColumnas.subcategoria].trim();
+      if (subcat && !partesObs.some((p) => p.toLowerCase().includes(subcat.toLowerCase()))) {
+        partesObs.push(`Subcategoría: ${subcat}`);
+      }
+    }
+    if (mapaColumnas.iva !== undefined && normalizarMonto(fila[mapaColumnas.iva]) > 0) {
+      partesObs.push(`IVA: $${normalizarMonto(fila[mapaColumnas.iva])}`);
+    }
+    if (mapaColumnas.propina !== undefined && normalizarMonto(fila[mapaColumnas.propina]) > 0) {
+      partesObs.push(`Propina: $${normalizarMonto(fila[mapaColumnas.propina])}`);
+    }
+    if (mapaColumnas.mes_ano !== undefined && fila[mapaColumnas.mes_ano]?.trim()) {
+      const mesAno = fila[mapaColumnas.mes_ano].trim();
+      if (mesAno && !partesObs.some((p) => p.toLowerCase().includes(mesAno.toLowerCase()))) {
+        partesObs.push(`Periodo: ${mesAno}`);
+      }
+    }
+
+    const observaciones = partesObs.join(' | ');
+
+    // Preservar ID si vino en el archivo, o generar uno nuevo único
+    const idEnFila = mapaColumnas.id !== undefined && fila[mapaColumnas.id]?.trim() ? fila[mapaColumnas.id].trim() : '';
+    const id = idEnFila || `gsheet_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`;
     const timestamp = `${fecha}T${hora}:00`;
 
     const gasto: Gasto = {
       id,
-      establecimiento: establecimiento.trim(),
+      establecimiento: String(establecimiento).trim(),
       fecha,
       hora,
-      ciudad: ciudad.trim(),
-      nit: nit ? nit.trim() : undefined,
+      ciudad: String(ciudad).trim(),
+      nit: nit ? String(nit).trim() : undefined,
       categoria,
       metodo_pago,
       total,
-      observaciones: observaciones.trim() || undefined,
+      observaciones: observaciones || undefined,
+      foto_factura_uri,
       sincronizado: true,
       creado_en: timestamp,
       actualizado_en: timestamp,
@@ -707,14 +1048,14 @@ export function procesarImportacionGoogleSheets(textoCrudo: string): ResultadoIm
       columnasMapeadas: mapaColumnas,
       totalMonto: 0,
       conteoPorCategoria,
-      errores: ['No se pudieron extraer gastos válidos de las filas procesadas.'],
+      errores: ['No se pudieron extraer facturas válidas del archivo o enlace proporcionado.'],
       advertencias,
     };
   }
 
   return {
     exito: true,
-    totalFilas: filas.length - filaInicio,
+    totalFilas: gastosParseados.length,
     gastosImportados: gastosParseados,
     columnasMapeadas: mapaColumnas,
     totalMonto,
@@ -726,6 +1067,7 @@ export function procesarImportacionGoogleSheets(textoCrudo: string): ResultadoIm
 
 /**
  * Descarga y extrae los datos directamente desde una URL pública de Google Sheets
+ * Soporta gid de pestaña específico (#gid=... o &gid=...)
  */
 export async function descargarGoogleSheetsCSV(url: string): Promise<{
   exito: boolean;
@@ -742,9 +1084,12 @@ export async function descargarGoogleSheetsCSV(url: string): Promise<{
     }
 
     const sheetId = match[1];
+    const gidMatch = url.match(/[#&?]gid=([0-9]+)/);
+    const gid = gidMatch ? gidMatch[1] : '0';
 
-    // Intentar endpoint de exportación directa a CSV
     const urlsToTry = [
+      `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`,
+      `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`,
       `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`,
       `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`,
     ];
@@ -777,35 +1122,20 @@ export async function descargarGoogleSheetsCSV(url: string): Promise<{
 }
 
 /**
- * Genera contenido CSV de plantilla oficial con las 23 categorías
+ * Genera contenido CSV con la estructura oficial de 18 columnas solicitada por el usuario:
+ * ID, Fecha, Hora, Establecimiento, NIT, Ciudad, Categoría, Subcategoría, Método de pago, Subtotal, IVA, Descuento, Propina, Total, Observaciones, Imagen (Drive), Fecha de registro, MesAño
+ * Incluye datos reales para Cúcuta, Santa Marta y Bogotá.
  */
 export function generarPlantillaGoogleSheets(): string {
-  const encabezado = 'Fecha,Hora,Establecimiento,NIT,Categoria,Metodo_Pago,Ciudad,Total,Observaciones';
+  const encabezado =
+    'ID,Fecha,Hora,Establecimiento,NIT,Ciudad,Categoría,Subcategoría,Método de pago,Subtotal,IVA,Descuento,Propina,Total,Observaciones,Imagen (Drive),Fecha de registro,MesAño';
   const ejemplos = [
-    '2026-10-06,08:45,Estación Terpel Avenida Cero,860.005.224-6,Gasolina,Tarjeta Crédito,Cúcuta,145000,Tanque lleno corriente',
-    '2026-10-06,14:20,Éxito San Mateo,890.900.608-9,Mercado,Tarjeta Débito,Cúcuta,320500,Mercado quincenal',
-    '2026-10-06,17:15,Oxxo Caobos,,Snacks,Efectivo,Cúcuta,18500,Café y galletas',
-    '2026-10-05,19:30,Restaurante Rodizio Cúcuta,860.519.894-3,Restaurantes,Tarjeta Débito,Cúcuta,89400,Cena familiar',
-    '2026-10-04,11:15,Cruz Verde Droguería Cúcuta,,Salud,Transferencia,Cúcuta,64200,Vitaminas y medicamentos',
-    '2026-10-01,09:00,Inmobiliaria del Norte,900.845.120-7,Vivienda,Transferencia,Cúcuta,2150000,Arriendo del mes',
-    '2026-09-28,03:00,Netflix Suscripción,,Suscripciones,Tarjeta Crédito,Cúcuta,44900,Plan Premium 4k',
-    '2026-09-25,18:40,Centrales Eléctricas CENS,860.003.559-7,Servicios,Transferencia,Cúcuta,185000,Factura energía eléctrica',
-    '2026-09-22,16:00,Binance Exchange,,Crypto,Transferencia,Cúcuta,500000,Aporte mensual USDT/BTC',
-    '2026-09-18,20:00,PlayStation Store,,Videojuegos,Tarjeta Crédito,Cúcuta,189000,Pase de temporada',
-    '2026-09-15,10:30,Universidad UFPS Cúcuta,860.007.386-1,Educación,Transferencia,Cúcuta,1200000,Especialización software',
-    '2026-09-12,15:30,Zara Ventura Plaza,800.222.333-4,Ropa,Tarjeta Crédito,Cúcuta,280000,Ropa para oficina',
-    '2026-09-10,14:00,Taller Mecánico La Cero,900.444.555-6,Taller,Efectivo,Cúcuta,210000,Cambio de aceite y pastillas',
-    '2026-09-08,12:00,Secretaría Tránsito Cúcuta,899.999.061-9,Multas,Transferencia,Cúcuta,340000,Fotomulta velocidad',
-    '2026-09-05,11:00,Fundación Esperanza Cúcuta,,Caridad,Transferencia,Cúcuta,100000,Donación mensual',
-    '2026-09-02,18:00,Pastelería Santa Elena Cúcuta,,Cumpleaños,Tarjeta Débito,Cúcuta,95000,Torta de cumpleaños',
-    '2026-08-30,22:00,BetPlay Colombia,,Apuestas,Transferencia,Cúcuta,50000,Pronóstico deportivo',
-    '2026-08-25,13:00,Transporte Terminal Cúcuta,,Transporte,Tarjeta Crédito,Cúcuta,28500,Traslado al aeropuerto Camilo Daza',
-    '2026-08-20,10:00,Avianca Airlines Camilo Daza,890.100.577-6,Viajes,Tarjeta Crédito,Cúcuta,650000,Tiquetes fin de año',
-    '2026-08-15,16:00,Apple Ventura Plaza,,Tecnología,Tarjeta Crédito,Cúcuta,980000,Accesorios y cargador',
-    '2026-08-10,19:00,Cine Colombia Ventura Plaza,,Entretenimiento,Tarjeta Débito,Cúcuta,56000,Entradas y combos cine',
-    '2026-08-05,15:00,Amazon Imports,,Compras,Tarjeta Crédito,Cúcuta,320000,Mochila y termo térmico',
-    '2026-08-01,10:00,Papelería Cúcuta Centro,,Otros,Efectivo,Cúcuta,35000,Cuadernos y bolígrafos',
+    '1,2026-03-01,09:15,Ventura Plaza Cúcuta,900.254.123-1,Cúcuta,Mercado,Víveres,Tarjeta Débito,120000,19000,0,0,139000,Mercado quincenal familiar,,2026-03-01 10:00:00,Marzo 2026',
+    '2,2026-03-02,13:30,Restaurante El Rodadero,860.519.894-3,Santa Marta,Restaurantes,Almuerzo,Tarjeta Crédito,75000,0,0,7500,82500,Almuerzo frente a la playa,,2026-03-02 14:15:00,Marzo 2026',
+    '3,2026-03-03,07:45,Estación Terpel Los Patios Cúcuta,860.005.224-6,Cúcuta,Gasolina,Corriente,Efectivo,95000,0,0,0,95000,Combustible semana,,2026-03-03 08:00:00,Marzo 2026',
+    '4,2026-03-04,16:20,Oxxo Santa Marta Centro,900.876.543-2,Santa Marta,Snacks,Bebidas,Transferencia,18500,0,0,0,18500,Café y refrigerio tarde,,2026-03-04 16:35:00,Marzo 2026',
+    '5,2026-03-05,11:00,Droguerías Cruz Verde,800.123.456-7,Bogotá,Salud,Farmacia,Tarjeta Débito,48900,0,0,0,48900,Medicamentos y vitaminas,,2026-03-05 11:30:00,Marzo 2026',
   ];
 
-  return [encabezado, ...ejemplos].join('\n');
+  return [encabezado, ...ejemplos].join('\r\n');
 }

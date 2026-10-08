@@ -13,6 +13,9 @@ import {
   getAuth,
   signInAnonymously,
   onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
   User
 } from 'firebase/auth';
 import configJson from '../../firebase-applet-config.json';
@@ -62,6 +65,41 @@ function getOrGenerateLocalUid(): string {
 
 let cachedUser: AppUserSession | null = null;
 let attemptSignInRunning = false;
+
+// Safe Google Sign-In helper
+export async function loginWithGoogle(): Promise<{ success: boolean; email?: string; uid?: string; error?: string }> {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+    cachedUser = {
+      uid: user.uid,
+      email: user.email,
+      isAnonymous: false,
+    };
+    return {
+      success: true,
+      email: user.email || undefined,
+      uid: user.uid,
+    };
+  } catch (err: any) {
+    console.warn('Google Sign-In note:', err?.message || err);
+    return {
+      success: false,
+      error: err?.message || 'No se pudo completar el inicio de sesión con Google. Puedes ingresar tu correo manualmente.',
+    };
+  }
+}
+
+export async function logoutUser(): Promise<void> {
+  try {
+    await signOut(auth);
+    cachedUser = null;
+  } catch (err) {
+    console.warn('Logout note:', err);
+  }
+}
 
 // Safe authentication resolver: never throws auth/admin-restricted-operation
 export async function ensureAuthUser(): Promise<AppUserSession> {
@@ -185,22 +223,37 @@ export async function fetchGastosFromFirestore(): Promise<Gasto[]> {
     const gastosCol = collection(db, 'users', user.uid, 'gastos');
     const snapshot = await getDocs(gastosCol);
     const resultado: Gasto[] = [];
-    snapshot.forEach((d) => {
+    for (const d of snapshot.docs) {
       const data = d.data();
+      const totalNum = Number(data.total) || 0;
+      const cat = data.categoria || 'Otros';
+      const est = String(data.establecimiento || '');
+      
+      // Depuración de registros corruptos (ej. 10M en Otros por importación con columnas desfasadas)
+      const esCorrupto = (cat === 'Otros' || cat === 'Otro') && totalNum >= 5000000;
+      const esEstablecimientoInvalido = /^\d{4}-\d{2}-\d{2}/.test(est) || /^\d{8,11}$/.test(est.replace(/[^0-9]/g, ''));
+
+      if (esCorrupto || esEstablecimientoInvalido) {
+        // Eliminar de Firestore para que no vuelva a aparecer
+        deleteDoc(d.ref).catch(() => {});
+        continue;
+      }
+
       resultado.push({
         id: data.id || d.id,
-        establecimiento: data.establecimiento,
+        establecimiento: est,
         fecha: data.fecha,
         hora: data.hora,
         ciudad: data.ciudad || 'Cúcuta',
         nit: data.nit || undefined,
-        categoria: data.categoria,
-        metodo_pago: data.metodo_pago,
-        total: data.total,
+        categoria: cat,
+        metodo_pago: data.metodo_pago || 'Tarjeta Débito',
+        total: totalNum,
         observaciones: data.observaciones || undefined,
-        sincronizado: true
+        foto_factura_uri: data.foto_factura_uri || undefined,
+        sincronizado: true,
       });
-    });
+    }
     return resultado;
   } catch (err) {
     console.warn('Fetch gastos Firestore note:', err);

@@ -14,11 +14,17 @@ import {
   Smartphone,
   Shield,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Crown,
+  Lock
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { UsuarioConfig } from '../types/finance';
-import { guardarConfiguracion, reiniciarDatosACero } from '../services/storageService';
+import {
+  guardarConfiguracion,
+  reiniciarDatosACero,
+  esUsuarioAdmin
+} from '../services/storageService';
 import { SQLITE_SCHEMA_SQL } from '../db/sqliteSchema';
 import { AuraLogo } from './AuraLogo';
 
@@ -28,6 +34,7 @@ interface SettingsModalProps {
   onConfigUpdated: (config: UsuarioConfig) => void;
   onDataReset: () => void;
   onOpenSyncSheets: () => void;
+  onOpenPremium?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -36,6 +43,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onConfigUpdated,
   onDataReset,
   onOpenSyncSheets,
+  onOpenPremium,
 }) => {
   const { isDark, toggleTheme } = useTheme();
   const [tab, setTab] = useState<'general' | 'datos' | 'desarrollo'>('general');
@@ -233,12 +241,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Correo Electrónico */}
+              {/* Correo Electrónico & Estado Premium */}
               <div>
                 <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${
                   isDark ? 'text-neutral-300' : 'text-slate-700'
                 }`}>
-                  Correo del Usuario (Opcional)
+                  Correo del Usuario
                 </label>
                 <input
                   type="email"
@@ -251,6 +259,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       : 'bg-white border-slate-200 text-slate-900 focus:border-emerald-500'
                   }`}
                 />
+              </div>
+
+              {/* Tarjeta Informativa de Estado Premium */}
+              <div
+                className={`p-3.5 rounded-2xl border text-xs flex items-center justify-between gap-3 ${
+                  esUsuarioAdmin(email)
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                    : isDark
+                    ? 'bg-neutral-950/40 border-neutral-800 text-neutral-300'
+                    : 'bg-slate-50 border-slate-200 text-slate-700'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  {esUsuarioAdmin(email) ? (
+                    <Crown size={18} className="text-amber-500 shrink-0" />
+                  ) : (
+                    <Lock size={16} className="text-amber-500 shrink-0" />
+                  )}
+                  <div>
+                    <div className="font-bold flex items-center gap-1.5">
+                      <span>{esUsuarioAdmin(email) ? '👑 Administrador Master Pro' : '⭐ Función Premium (Muy pronto)'}</span>
+                    </div>
+                    <div className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
+                      {esUsuarioAdmin(email)
+                        ? 'Acceso desbloqueado de por vida a la Suite Tributaria DIAN y Libro Fiscal.'
+                        : 'Próximamente disponible con herramientas contables y tributarias avanzadas.'}
+                    </div>
+                  </div>
+                </div>
+
+                {onOpenPremium && (
+                  <button
+                    type="button"
+                    onClick={onOpenPremium}
+                    className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-amber-400 font-bold text-xs border border-amber-500/30 shrink-0 cursor-pointer transition-colors"
+                  >
+                    {esUsuarioAdmin(email) ? 'Abrir Pro' : 'Muy pronto'}
+                  </button>
+                )}
               </div>
 
               {/* Botón Guardar */}

@@ -219,28 +219,36 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ gastos }) => {
                 })}
               </svg>
 
-              {/* Total Global en el centro del Donut */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+              {/* Total en el centro del Donut (cambia a la categoría seleccionada al hacer clic) */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
                 <span
-                  className={`text-[10px] uppercase tracking-wider font-semibold ${
+                  className={`text-[10px] uppercase tracking-wider font-semibold truncate max-w-[140px] ${
                     isDark ? 'text-neutral-400' : 'text-slate-500'
                   }`}
                 >
-                  Total Global
+                  {categoriaSeleccionada ? `Total ${categoriaSeleccionada}` : 'Total Global'}
                 </span>
                 <span
                   className={`text-lg sm:text-xl font-extrabold font-mono tracking-tight mt-0.5 ${
                     isDark ? 'text-white' : 'text-slate-900'
                   }`}
                 >
-                  {formatearMoneda(totalGlobal)}
+                  {categoriaSeleccionada
+                    ? formatearMoneda(
+                        datosCategorias.find((c) => c.categoria === categoriaSeleccionada)?.total || 0
+                      )
+                    : formatearMoneda(totalGlobal)}
                 </span>
                 <span
                   className={`text-[10px] font-medium mt-0.5 ${
                     isDark ? 'text-emerald-400' : 'text-emerald-600'
                   }`}
                 >
-                  {gastosPeriodo.length} {gastosPeriodo.length === 1 ? 'factura' : 'facturas'}
+                  {categoriaSeleccionada
+                    ? `${(
+                        datosCategorias.find((c) => c.categoria === categoriaSeleccionada)?.porcentaje || 0
+                      ).toFixed(1)}% del período`
+                    : `${gastosPeriodo.length} ${gastosPeriodo.length === 1 ? 'factura' : 'facturas'}`}
                 </span>
               </div>
             </>
@@ -295,13 +303,22 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ gastos }) => {
                         {cat.categoria}
                       </span>
                     </div>
-                    <span
-                      className={`text-xs font-mono font-bold shrink-0 ml-1 ${
-                        isDark ? 'text-white' : 'text-slate-900'
-                      }`}
-                    >
-                      {cat.porcentaje.toFixed(0)}%
-                    </span>
+                    <div className="text-right shrink-0 ml-1.5 font-mono">
+                      <span
+                        className={`text-[11px] font-bold block ${
+                          isDark ? 'text-white' : 'text-slate-900'
+                        }`}
+                      >
+                        {formatearMoneda(cat.total)}
+                      </span>
+                      <span
+                        className={`text-[9px] block ${
+                          isDark ? 'text-neutral-400' : 'text-slate-400'
+                        }`}
+                      >
+                        {cat.porcentaje.toFixed(0)}%
+                      </span>
+                    </div>
                   </button>
                 );
               })}

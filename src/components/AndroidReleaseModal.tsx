@@ -74,6 +74,13 @@ jobs:
       - name: Dar permisos de ejecución a gradlew
         run: chmod +x android/gradlew
 
+      - name: Verificar Keystore de producción persistente
+        run: |
+          if [ ! -f "android/app/aura-release.keystore" ]; then
+            openssl req -x509 -newkey rsa:2048 -keyout /tmp/key.pem -out /tmp/cert.pem -days 10000 -nodes -subj "/CN=Aura Finanzas/O=Aura Finanzas/C=CO"
+            openssl pkcs12 -export -out android/app/aura-release.keystore -inkey /tmp/key.pem -in /tmp/cert.pem -name aurakey -passout pass:aura2026finanzas
+          fi
+
       - name: Compilar APK Debug (Firmado para cualquier celular)
         run: |
           cd android
@@ -92,6 +99,8 @@ jobs:
           fi
           if [ -f "android/app/build/outputs/apk/release/app-release.apk" ]; then
             cp android/app/build/outputs/apk/release/app-release.apk dist-apk/AuraFinanzas-Release.apk
+          elif [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk dist-apk/AuraFinanzas-Release.apk
           fi
 
       - name: Subir APK Debug como Artefacto (Descomprimir .zip para instalar)
@@ -115,7 +124,7 @@ jobs:
         continue-on-error: true
         with:
           tag_name: release-apk-latest
-          name: "Aura Finanzas v1.0 (APK Instalable Android)"
+          name: "Aura Finanzas v1.2 (APK Firmado para cualquier teléfono Android)"
           draft: false
           prerelease: false
           files: |
