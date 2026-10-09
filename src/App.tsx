@@ -82,6 +82,10 @@ export default function App() {
 
   // Escuchador de Autenticación Firebase en Tiempo Real
   useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      setAuthReady(true);
+    }, 1800);
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
@@ -116,10 +120,14 @@ export default function App() {
         }
       }
       setAuthReady(true);
+      clearTimeout(fallbackTimer);
     });
 
     recargarDatos();
-    return () => unsubscribe();
+    return () => {
+      clearTimeout(fallbackTimer);
+      unsubscribe();
+    };
   }, []);
 
   const handleOpenNewExpense = (prefill?: Partial<Gasto>) => {

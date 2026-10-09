@@ -15,6 +15,7 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithCredential,
   signOut,
   User
 } from 'firebase/auth';
@@ -171,6 +172,7 @@ export type GoogleAuthFailureCause =
   | 'popup_closed'
   | 'network_error'
   | 'app_in_testing'
+  | 'storage_partitioned'
   | 'unknown';
 
 export interface GoogleLoginResult {
@@ -196,6 +198,54 @@ export interface GoogleLoginResult {
   };
 }
 
+// Google Identity Services (GIS) / ID Token direct credential sign-in (sin problemas de sessionStorage)
+export async function loginWithGoogleCredential(idToken: string): Promise<GoogleLoginResult> {
+  console.group('🔐 [Firebase Auth] Autenticando mediante credencial oficial de Google');
+  try {
+    const credential = GoogleAuthProvider.credential(idToken);
+    const result = await signInWithCredential(auth, credential);
+    const user = result.user;
+
+    console.log('✅ [Firebase Auth] Sesión con credencial de Google exitosa:', {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+    });
+    console.groupEnd();
+
+    cachedUser = {
+      uid: user.uid,
+      email: user.email,
+      isAnonymous: false,
+    };
+    try {
+      if (user.email) {
+        localStorage.setItem(STORAGE_KEY_GOOGLE_EMAIL, user.email);
+      }
+      localStorage.setItem(STORAGE_KEY_UID, user.uid);
+      localStorage.removeItem('aura_modo_invitado');
+    } catch {}
+
+    return {
+      success: true,
+      email: user.email || undefined,
+      uid: user.uid,
+      displayName: user.displayName || undefined,
+      photoURL: user.photoURL || undefined,
+    };
+  } catch (err: any) {
+    const rawMsg = err?.message || String(err);
+    const code = err?.code || '';
+    console.error('❌ [Firebase Auth] Error en signInWithCredential:', code, rawMsg);
+    console.groupEnd();
+    return {
+      success: false,
+      error: `Error al validar credencial de Google: ${rawMsg}`,
+      errorCode: code,
+    };
+  }
+}
+
 // Safe Google Sign-In helper con diagnóstico y logging exhaustivo
 export async function loginWithGoogle(): Promise<GoogleLoginResult> {
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
@@ -213,7 +263,20 @@ export async function loginWithGoogle(): Promise<GoogleLoginResult> {
   try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-    const result = await signInWithPopup(auth, provider);
+
+    // Protección con temporizador: si el navegador congela el popup en blanco por partición de storage
+    const popupPromise = signInWithPopup(auth, provider);
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(
+          new Error(
+            'storage-partitioned: La ventana de autenticación de Google no respondió o quedó en blanco debido a la partición de almacenamiento del navegador (missing initial state).'
+          )
+        );
+      }, 12000);
+    });
+
+    const result = await Promise.race([popupPromise, timeoutPromise]);
     const user = result.user;
 
     console.log('✅ [Firebase Auth] Autenticación con Google exitosa:', {
@@ -331,7 +394,18 @@ export async function loginWithGoogle(): Promise<GoogleLoginResult> {
       detectedCause = 'popup_blocked';
       friendlyError = 'El navegador o WebView bloqueó la ventana emergente de Google.';
     }
-    // 5. Errores de red
+    // 5. Partición de almacenamiento / SessionStorage inaccesible (Missing initial state)
+    else if (
+      lowerMsg.includes('missing initial state') ||
+      lowerMsg.includes('sessionstorage') ||
+      lowerMsg.includes('storage-partitioned') ||
+      lowerMsg.includes('storage partitioned')
+    ) {
+      detectedCause = 'storage_partitioned';
+      friendlyError = 'El navegador bloqueó sessionStorage debido a la partición de almacenamiento (Third-party cookies). Usa el botón oficial de Google para ingresar directamente.';
+      esConfig = false;
+    }
+    // 6. Errores de red
     else if (lowerCode === 'auth/network-request-failed' || lowerMsg.includes('network')) {
       detectedCause = 'network_error';
       friendlyError = 'Error de conexión de red al contactar los servidores de Google/Firebase.';
