@@ -18,7 +18,8 @@ import {
   auth,
   onAuthStateChanged,
   logoutUser,
-  loginWithGoogle
+  loginWithGoogle,
+  getCachedUser
 } from './services/firebase';
 import { MobileFrame } from './components/MobileFrame';
 import { ExpenseList } from './components/ExpenseList';
@@ -29,11 +30,13 @@ import { ReceiptScanner } from './components/ReceiptScanner';
 import { SyncSheetModal } from './components/SyncSheetModal';
 import { SettingsModal } from './components/SettingsModal';
 import { PremiumProModal } from './components/PremiumProModal';
-import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
+import { AuthWelcomeScreen, AppUserLike } from './components/AuthWelcomeScreen';
 import { CurrencySelectModal } from './components/CurrencySelectModal';
 import { AuraLogo } from './components/AuraLogo';
 import { useTheme } from './context/ThemeContext';
 import { Crown, Lock, Cloud, RefreshCw } from 'lucide-react';
+
+export type AppUser = User | AppUserLike;
 
 export default function App() {
   const { isDark } = useTheme();
@@ -42,7 +45,14 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'gastos' | 'calendar' | 'analytics' | 'sync' | 'widgets'>('gastos');
 
   // Estado de Autenticación Real de Google y Modo Invitado
-  const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
+    if (auth.currentUser) return auth.currentUser;
+    const cached = getCachedUser();
+    if (cached && cached.email) {
+      return { uid: cached.uid, email: cached.email, displayName: cached.email.split('@')[0] };
+    }
+    return null;
+  });
   const [esInvitado, setEsInvitado] = useState<boolean>(() => {
     try {
       return localStorage.getItem('aura_modo_invitado') === 'true';
@@ -73,8 +83,8 @@ export default function App() {
   // Escuchador de Autenticación Firebase en Tiempo Real
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
       if (user) {
+        setCurrentUser(user);
         setEsInvitado(false);
         try {
           localStorage.removeItem('aura_modo_invitado');
@@ -97,6 +107,12 @@ export default function App() {
         if (user.email) {
           const conf = guardarConfiguracion({ email: user.email, modo: 'sincronizado' });
           setConfig(conf);
+        }
+      } else {
+        const cached = getCachedUser();
+        if (cached && cached.email) {
+          setCurrentUser({ uid: cached.uid, email: cached.email, displayName: cached.email.split('@')[0] });
+          setEsInvitado(false);
         }
       }
       setAuthReady(true);
@@ -237,22 +253,7 @@ export default function App() {
             ) : (
               <button
                 type="button"
-                onClick={async () => {
-                  try {
-                    const resp = await loginWithGoogle();
-                    if (resp.success && auth.currentUser) {
-                      setCurrentUser(auth.currentUser);
-                      setEsInvitado(false);
-                      try {
-                        localStorage.removeItem('aura_modo_invitado');
-                      } catch {}
-                      await sincronizarConCuentaGoogle();
-                      recargarDatos();
-                    }
-                  } catch (e) {
-                    console.warn('Connect Google error:', e);
-                  }
-                }}
+                onClick={() => setMostrarAuthManual(true)}
                 className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 hover:bg-amber-500/20 text-[11px] font-bold transition-all cursor-pointer"
                 title="Tus datos están en modo local. Toca para conectar con Google y respaldar en la nube"
               >
@@ -359,21 +360,9 @@ export default function App() {
             onDataReset={recargarDatos}
             onOpenSyncSheets={() => handleOpenImportSheet('sheet')}
             onOpenPremium={() => setMostrarPremiumModal(true)}
-            onConectarGoogle={async () => {
-              try {
-                const resp = await loginWithGoogle();
-                if (resp.success && auth.currentUser) {
-                  setCurrentUser(auth.currentUser);
-                  setEsInvitado(false);
-                  try {
-                    localStorage.removeItem('aura_modo_invitado');
-                  } catch {}
-                  await sincronizarConCuentaGoogle();
-                  recargarDatos();
-                }
-              } catch (e) {
-                console.warn('Connect Google error:', e);
-              }
+            onConectarGoogle={() => {
+              setMostrarSettings(false);
+              setMostrarAuthManual(true);
             }}
             onCerrarSesion={async () => {
               await logoutUser();

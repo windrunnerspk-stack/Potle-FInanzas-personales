@@ -41,7 +41,7 @@ interface SettingsModalProps {
   onDataReset: () => void;
   onOpenSyncSheets: () => void;
   onOpenPremium?: () => void;
-  currentUser?: User | null;
+  currentUser?: { uid: string; email?: string | null; displayName?: string | null } | null;
   esInvitado?: boolean;
   onConectarGoogle?: () => void;
   onCerrarSesion?: () => void;

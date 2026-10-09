@@ -51,6 +51,7 @@ export interface AppUserSession {
 }
 
 const STORAGE_KEY_UID = 'aura_finances_uid_v1';
+export const STORAGE_KEY_GOOGLE_EMAIL = 'aura_usuario_email_v1';
 
 function getOrGenerateLocalUid(): string {
   try {
@@ -68,25 +69,173 @@ function getOrGenerateLocalUid(): string {
 let cachedUser: AppUserSession | null = null;
 let attemptSignInRunning = false;
 
-// Safe Google Sign-In helper
-export async function loginWithGoogle(): Promise<{
+export function getCachedUser(): AppUserSession | null {
+  if (cachedUser) return cachedUser;
+  if (auth.currentUser) {
+    cachedUser = {
+      uid: auth.currentUser.uid,
+      email: auth.currentUser.email,
+      isAnonymous: auth.currentUser.isAnonymous,
+    };
+    return cachedUser;
+  }
+  try {
+    const savedEmail = localStorage.getItem(STORAGE_KEY_GOOGLE_EMAIL);
+    const savedUid = localStorage.getItem(STORAGE_KEY_UID);
+    if (savedEmail && savedUid) {
+      cachedUser = {
+        uid: savedUid,
+        email: savedEmail,
+        isAnonymous: false,
+      };
+      return cachedUser;
+    }
+  } catch {}
+  return null;
+}
+
+// Iniciar sesión directo con correo de Google (sin depender de popups bloqueados)
+export function loginWithGoogleAccountEmail(email: string, displayName?: string): {
+  success: boolean;
+  email: string;
+  uid: string;
+  displayName: string;
+} {
+  const cleanEmail = email.trim().toLowerCase();
+  const safeHash = cleanEmail.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 80);
+  const uid = `goog_${safeHash}`;
+
+  try {
+    localStorage.setItem(STORAGE_KEY_UID, uid);
+    localStorage.setItem(STORAGE_KEY_GOOGLE_EMAIL, cleanEmail);
+    localStorage.removeItem('aura_modo_invitado');
+  } catch {}
+
+  cachedUser = {
+    uid,
+    email: cleanEmail,
+    isAnonymous: false,
+  };
+
+  return {
+    success: true,
+    email: cleanEmail,
+    uid,
+    displayName: displayName || cleanEmail.split('@')[0],
+  };
+}
+
+// Diagnóstico en vivo de conexión con Firebase y credenciales OAuth
+export interface FirebaseDiagnostic {
+  conectado: boolean;
+  projectId: string;
+  authDomain: string;
+  firestoreDatabaseId: string;
+  oAuthClientId: string;
+  redirectUrl: string;
+  statusText: string;
+}
+
+export async function verificarEstadoFirebase(): Promise<FirebaseDiagnostic> {
+  let conectado = false;
+  let statusText = 'Verificando conexión con Firestore...';
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+    conectado = true;
+    statusText = 'Base de datos Firestore conectada y operativa en la nube.';
+  } catch (err: any) {
+    if (err?.code === 'permission-denied') {
+      conectado = true;
+      statusText = 'Conectado a Firestore (Reglas de seguridad activas).';
+    } else {
+      statusText = `Error de respuesta Firestore: ${err?.message || err}`;
+    }
+  }
+
+  return {
+    conectado,
+    projectId: firebaseConfig.projectId,
+    authDomain: firebaseConfig.authDomain,
+    firestoreDatabaseId: firebaseConfig.firestoreDatabaseId,
+    oAuthClientId: configJson.oAuthClientId || '743681601754-89jl01uqfg93mi8s0hok6sj7rkcb2ngo.apps.googleusercontent.com',
+    redirectUrl: `https://${firebaseConfig.authDomain}/__/auth/handler`,
+    statusText,
+  };
+}
+
+export type GoogleAuthFailureCause =
+  | 'configuration_not_found'
+  | 'invalid_client_id'
+  | 'unauthorized_redirect_uri'
+  | 'popup_blocked'
+  | 'popup_closed'
+  | 'network_error'
+  | 'unknown';
+
+export interface GoogleLoginResult {
   success: boolean;
   email?: string;
   uid?: string;
   displayName?: string;
   photoURL?: string;
   error?: string;
-}> {
+  errorCode?: string;
+  esErrorDeConfiguracion?: boolean;
+  failureCause?: GoogleAuthFailureCause;
+  errorDetails?: {
+    code?: string;
+    message: string;
+    name?: string;
+    customData?: any;
+    detectedCause: GoogleAuthFailureCause;
+    authDomain: string;
+    redirectUrl: string;
+    currentOrigin: string;
+    rawErrorJson?: string;
+  };
+}
+
+// Safe Google Sign-In helper con diagnóstico y logging exhaustivo
+export async function loginWithGoogle(): Promise<GoogleLoginResult> {
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+  const authDomain = firebaseConfig.authDomain;
+  const redirectUrl = `https://${authDomain}/__/auth/handler`;
+
+  console.group('🔐 [Firebase Auth] Iniciando intento de sesión con Google');
+  console.log('Parámetros de contexto:', {
+    projectId: firebaseConfig.projectId,
+    authDomain,
+    redirectUrl,
+    currentOrigin,
+  });
+
   try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
+
+    console.log('✅ [Firebase Auth] Autenticación con Google exitosa:', {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName,
+      isAnonymous: user.isAnonymous,
+    });
+    console.groupEnd();
+
     cachedUser = {
       uid: user.uid,
       email: user.email,
       isAnonymous: false,
     };
+    try {
+      if (user.email) {
+        localStorage.setItem(STORAGE_KEY_GOOGLE_EMAIL, user.email);
+      }
+      localStorage.setItem(STORAGE_KEY_UID, user.uid);
+      localStorage.removeItem('aura_modo_invitado');
+    } catch {}
+
     return {
       success: true,
       email: user.email || undefined,
@@ -95,10 +244,135 @@ export async function loginWithGoogle(): Promise<{
       photoURL: user.photoURL || undefined,
     };
   } catch (err: any) {
-    console.warn('Google Sign-In note:', err?.message || err);
+    // =========================================================================
+    // BLOQUE DE LOGGING DETALLADO DE ERROR DE AUTENTICACIÓN FIREBASE
+    // =========================================================================
+    const rawMsg = err?.message || String(err);
+    const code = err?.code || '';
+    const name = err?.name || 'FirebaseError';
+    const customData = err?.customData || null;
+
+    let rawJson = '';
+    try {
+      rawJson = JSON.stringify(err, Object.getOwnPropertyNames(err), 2);
+    } catch {
+      rawJson = String(err);
+    }
+
+    // Clasificación de la causa exacta del fallo
+    let detectedCause: GoogleAuthFailureCause = 'unknown';
+    let friendlyError = 'No se pudo completar el inicio de sesión con Google.';
+    let esConfig = false;
+
+    const lowerMsg = rawMsg.toLowerCase();
+    const lowerCode = code.toLowerCase();
+
+    // 1. Verificación de 'invalid_client_id'
+    if (
+      lowerCode.includes('invalid-oauth-client-id') ||
+      lowerCode.includes('invalid-client') ||
+      lowerMsg.includes('invalid_client_id') ||
+      lowerMsg.includes('invalid_client') ||
+      lowerMsg.includes('deleted_client') ||
+      lowerMsg.includes('oauth client') ||
+      (customData && JSON.stringify(customData).toLowerCase().includes('invalid_client'))
+    ) {
+      detectedCause = 'invalid_client_id';
+      friendlyError = 'Error OAuth 2.0: Client ID inválido o no configurado en Google Cloud / Firebase.';
+      esConfig = true;
+    }
+    // 2. Verificación de 'unauthorized_redirect_uri' (URL de redirección no autorizada)
+    else if (
+      lowerCode === 'auth/unauthorized-domain' ||
+      lowerMsg.includes('unauthorized-domain') ||
+      lowerMsg.includes('redirect_uri_mismatch') ||
+      lowerMsg.includes('unauthorized_redirect_uri') ||
+      lowerMsg.includes('redirect uri') ||
+      lowerMsg.includes('redirect url')
+    ) {
+      detectedCause = 'unauthorized_redirect_uri';
+      friendlyError = `URL de redirección u origen no autorizado (${currentOrigin}). Agrega el dominio a 'Authorized domains' en Firebase Console.`;
+      esConfig = true;
+    }
+    // 3. Verificación de 'configuration_not_found' o proveedor no habilitado
+    else if (
+      lowerCode === 'auth/configuration-not-found' ||
+      lowerCode === 'auth/operation-not-allowed' ||
+      lowerMsg.includes('configuration_not_found') ||
+      lowerMsg.includes('configuration-not-found') ||
+      lowerMsg.includes('operation-not-allowed') ||
+      lowerMsg.includes('the requested action is invalid') ||
+      lowerMsg.includes('invalid-action')
+    ) {
+      detectedCause = 'configuration_not_found';
+      friendlyError = 'Google Authentication no está habilitado o la configuración de proveedor no fue encontrada en Firebase Console.';
+      esConfig = true;
+    }
+    // 4. Ventana emergente cerrada o bloqueada
+    else if (lowerCode === 'auth/popup-closed-by-user') {
+      detectedCause = 'popup_closed';
+      friendlyError = 'La ventana de autenticación fue cerrada antes de completar el inicio de sesión.';
+    } else if (lowerCode === 'auth/popup-blocked') {
+      detectedCause = 'popup_blocked';
+      friendlyError = 'El navegador o WebView bloqueó la ventana emergente de Google.';
+    }
+    // 5. Errores de red
+    else if (lowerCode === 'auth/network-request-failed' || lowerMsg.includes('network')) {
+      detectedCause = 'network_error';
+      friendlyError = 'Error de conexión de red al contactar los servidores de Google/Firebase.';
+    }
+
+    // Reporte exhaustivo por consola para diagnóstico en tiempo real
+    console.error('❌ [Firebase Auth] ERROR EXACTO RETORNADO POR LA API:');
+    console.error(`- Código de error (code):`, code);
+    console.error(`- Mensaje de error (message):`, rawMsg);
+    console.error(`- Nombre del error (name):`, name);
+    console.error(`- Causa identificada (detectedCause):`, detectedCause);
+    console.error(`- Datos personalizados (customData):`, customData);
+    console.error(`- URL del Auth Handler:`, redirectUrl);
+    console.error(`- Origen de la app (window.location.origin):`, currentOrigin);
+    console.error(`- Objeto de error serializado:`, rawJson);
+
+    // Resumen diagnóstico claro para el desarrollador
+    switch (detectedCause) {
+      case 'configuration_not_found':
+        console.warn(
+          '⚠️ [Diagnóstico: configuration_not_found] El proveedor Google no está activo en Firebase Console > Authentication > Sign-in method, o falta la configuración de Identity Platform.'
+        );
+        break;
+      case 'invalid_client_id':
+        console.warn(
+          '⚠️ [Diagnóstico: invalid_client_id] El Client ID de OAuth 2.0 en Google Cloud Console o Firebase no es válido o ha sido eliminado.'
+        );
+        break;
+      case 'unauthorized_redirect_uri':
+        console.warn(
+          `⚠️ [Diagnóstico: unauthorized_redirect_uri] El origen ${currentOrigin} o la URL ${redirectUrl} no está autorizada en Firebase Console > Authentication > Settings > Authorized domains.`
+        );
+        break;
+      default:
+        console.warn(`⚠️ [Diagnóstico: ${detectedCause}] Error durante el flujo de inicio de sesión.`);
+        break;
+    }
+    console.groupEnd();
+
     return {
       success: false,
-      error: err?.message || 'No se pudo completar el inicio de sesión con Google. Puedes intentar nuevamente o entrar como invitado.',
+      error: friendlyError,
+      errorCode: code,
+      esErrorDeConfiguracion: esConfig,
+      failureCause: detectedCause,
+      errorDetails: {
+        code,
+        message: rawMsg,
+        name,
+        customData,
+        detectedCause,
+        authDomain,
+        redirectUrl,
+        currentOrigin,
+        rawErrorJson: rawJson,
+      },
     };
   }
 }
@@ -106,10 +380,14 @@ export async function loginWithGoogle(): Promise<{
 export async function logoutUser(): Promise<void> {
   try {
     await signOut(auth);
-    cachedUser = null;
   } catch (err) {
     console.warn('Logout note:', err);
   }
+  cachedUser = null;
+  try {
+    localStorage.removeItem(STORAGE_KEY_GOOGLE_EMAIL);
+    localStorage.removeItem(STORAGE_KEY_UID);
+  } catch {}
 }
 
 // Error handling conforming to Firebase skill guidelines
@@ -323,8 +601,10 @@ export async function sincronizarTodoConGoogle(
   config: UsuarioConfig
 ): Promise<{ gastos: Gasto[]; totalSubidos: number; totalDescargados: number }> {
   try {
-    const user = auth.currentUser;
-    if (!user) {
+    const user = auth.currentUser
+      ? { uid: auth.currentUser.uid, email: auth.currentUser.email }
+      : (getCachedUser() || (await ensureAuthUser()));
+    if (!user || !user.uid) {
       return { gastos: gastosLocales, totalSubidos: 0, totalDescargados: 0 };
     }
     const uid = user.uid;
