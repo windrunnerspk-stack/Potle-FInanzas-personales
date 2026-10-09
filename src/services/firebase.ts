@@ -18,6 +18,8 @@ import {
   signOut,
   User
 } from 'firebase/auth';
+
+export { onAuthStateChanged };
 import configJson from '../../firebase-applet-config.json';
 import { Gasto, UsuarioConfig } from '../types/finance';
 
@@ -67,7 +69,14 @@ let cachedUser: AppUserSession | null = null;
 let attemptSignInRunning = false;
 
 // Safe Google Sign-In helper
-export async function loginWithGoogle(): Promise<{ success: boolean; email?: string; uid?: string; error?: string }> {
+export async function loginWithGoogle(): Promise<{
+  success: boolean;
+  email?: string;
+  uid?: string;
+  displayName?: string;
+  photoURL?: string;
+  error?: string;
+}> {
   try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
@@ -82,12 +91,14 @@ export async function loginWithGoogle(): Promise<{ success: boolean; email?: str
       success: true,
       email: user.email || undefined,
       uid: user.uid,
+      displayName: user.displayName || undefined,
+      photoURL: user.photoURL || undefined,
     };
   } catch (err: any) {
     console.warn('Google Sign-In note:', err?.message || err);
     return {
       success: false,
-      error: err?.message || 'No se pudo completar el inicio de sesión con Google. Puedes ingresar tu correo manualmente.',
+      error: err?.message || 'No se pudo completar el inicio de sesión con Google. Puedes intentar nuevamente o entrar como invitado.',
     };
   }
 }
@@ -99,6 +110,54 @@ export async function logoutUser(): Promise<void> {
   } catch (err) {
     console.warn('Logout note:', err);
   }
+}
+
+// Error handling conforming to Firebase skill guidelines
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.warn('Firestore Error Context:', JSON.stringify(errInfo));
+  return errInfo;
 }
 
 // Safe authentication resolver: never throws auth/admin-restricted-operation
@@ -128,10 +187,8 @@ export async function ensureAuthUser(): Promise<AppUserSession> {
         isAnonymous: cred.user.isAnonymous,
       };
       return cachedUser;
-    } catch (err: any) {
-      // If anonymous auth is disabled or restricted (e.g. auth/admin-restricted-operation in Google Cloud)
-      // gracefully fall back to local persistent UID
-      // Do NOT throw error or log to console.error
+    } catch {
+      // Fall back to device-persistent identifier without throwing
       console.info('Firebase Auth: Operando con identificador seguro persistente.');
     }
   }
@@ -149,26 +206,21 @@ export async function ensureAuthUser(): Promise<AppUserSession> {
 export async function testConnection(): Promise<boolean> {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-    console.info('Firebase Firestore conectado exitosamente.');
     return true;
-  } catch (error: any) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase Firestore en modo offline.');
-      return false;
-    }
-    // Document test/connection may not exist, but reaching Firestore confirms server handshake
-    console.info('Firestore handshake verificado.');
-    return true;
+  } catch {
+    // Graceful offline operation
+    return false;
   }
 }
 
 // Sync user profile to Firestore
-export async function syncUserProfileToFirestore(config: UsuarioConfig): Promise<void> {
+export async function syncUserProfileToFirestore(config: UsuarioConfig, userIdOverride?: string): Promise<void> {
+  const path = 'users';
   try {
-    const user = await ensureAuthUser();
+    const user = userIdOverride ? { uid: userIdOverride } : await ensureAuthUser();
     const userRef = doc(db, 'users', user.uid);
     await setDoc(userRef, {
-      email: config.email || 'usuario@aurafinanzas.app',
+      email: config.email || auth.currentUser?.email || 'usuario@aurafinanzas.app',
       modo: config.modo || 'sincronizado',
       moneda: config.moneda || 'COP',
       ciudad: 'Cúcuta',
@@ -176,50 +228,56 @@ export async function syncUserProfileToFirestore(config: UsuarioConfig): Promise
       updatedAt: new Date().toISOString()
     }, { merge: true });
   } catch (err) {
-    console.warn('Sync profile Firestore note:', err);
+    handleFirestoreError(err, OperationType.WRITE, path);
   }
 }
 
 // Sync expense to Firestore
-export async function syncGastoToFirestore(gasto: Gasto): Promise<void> {
+export async function syncGastoToFirestore(gasto: Gasto, userIdOverride?: string): Promise<void> {
+  let path = 'gastos';
   try {
-    const user = await ensureAuthUser();
+    const user = userIdOverride ? { uid: userIdOverride } : await ensureAuthUser();
+    path = `users/${user.uid}/gastos/${gasto.id}`;
     const gastoRef = doc(db, 'users', user.uid, 'gastos', gasto.id);
     await setDoc(gastoRef, {
-      id: gasto.id,
+      id: String(gasto.id),
       userId: user.uid,
-      establecimiento: gasto.establecimiento,
-      fecha: gasto.fecha,
-      hora: gasto.hora,
-      ciudad: gasto.ciudad || 'Cúcuta',
+      establecimiento: (gasto.establecimiento || 'Factura General').trim(),
+      fecha: gasto.fecha || new Date().toISOString().split('T')[0],
+      hora: gasto.hora || '12:00',
+      ciudad: gasto.ciudad || 'Bogotá',
       nit: gasto.nit || '',
-      categoria: gasto.categoria,
-      metodo_pago: gasto.metodo_pago,
-      total: Number(gasto.total) || 0,
+      categoria: gasto.categoria || 'Otros',
+      metodo_pago: gasto.metodo_pago || 'Tarjeta Débito',
+      total: Number(gasto.total) >= 0 ? Number(gasto.total) : 0,
       observaciones: gasto.observaciones || '',
       sincronizado: true,
       updatedAt: new Date().toISOString()
-    });
+    }, { merge: true });
   } catch (err) {
-    console.warn('Sync gasto Firestore note:', err);
+    handleFirestoreError(err, OperationType.WRITE, path);
   }
 }
 
 // Delete expense from Firestore
-export async function deleteGastoFromFirestore(gastoId: string): Promise<void> {
+export async function deleteGastoFromFirestore(gastoId: string, userIdOverride?: string): Promise<void> {
+  let path = 'gastos';
   try {
-    const user = await ensureAuthUser();
+    const user = userIdOverride ? { uid: userIdOverride } : await ensureAuthUser();
+    path = `users/${user.uid}/gastos/${gastoId}`;
     const gastoRef = doc(db, 'users', user.uid, 'gastos', gastoId);
     await deleteDoc(gastoRef);
   } catch (err) {
-    console.warn('Delete gasto Firestore note:', err);
+    handleFirestoreError(err, OperationType.DELETE, path);
   }
 }
 
 // Fetch all expenses from Firestore for current user
-export async function fetchGastosFromFirestore(): Promise<Gasto[]> {
+export async function fetchGastosFromFirestore(userIdOverride?: string): Promise<Gasto[]> {
+  let path = 'gastos';
   try {
-    const user = await ensureAuthUser();
+    const user = userIdOverride ? { uid: userIdOverride } : await ensureAuthUser();
+    path = `users/${user.uid}/gastos`;
     const gastosCol = collection(db, 'users', user.uid, 'gastos');
     const snapshot = await getDocs(gastosCol);
     const resultado: Gasto[] = [];
@@ -229,12 +287,10 @@ export async function fetchGastosFromFirestore(): Promise<Gasto[]> {
       const cat = data.categoria || 'Otros';
       const est = String(data.establecimiento || '');
       
-      // Depuración de registros corruptos (ej. 10M en Otros por importación con columnas desfasadas)
       const esCorrupto = (cat === 'Otros' || cat === 'Otro') && totalNum >= 5000000;
       const esEstablecimientoInvalido = /^\d{4}-\d{2}-\d{2}/.test(est) || /^\d{8,11}$/.test(est.replace(/[^0-9]/g, ''));
 
       if (esCorrupto || esEstablecimientoInvalido) {
-        // Eliminar de Firestore para que no vuelva a aparecer
         deleteDoc(d.ref).catch(() => {});
         continue;
       }
@@ -243,8 +299,8 @@ export async function fetchGastosFromFirestore(): Promise<Gasto[]> {
         id: data.id || d.id,
         establecimiento: est,
         fecha: data.fecha,
-        hora: data.hora,
-        ciudad: data.ciudad || 'Cúcuta',
+        hora: data.hora || '12:00',
+        ciudad: data.ciudad || 'Bogotá',
         nit: data.nit || undefined,
         categoria: cat,
         metodo_pago: data.metodo_pago || 'Tarjeta Débito',
@@ -256,10 +312,57 @@ export async function fetchGastosFromFirestore(): Promise<Gasto[]> {
     }
     return resultado;
   } catch (err) {
-    console.warn('Fetch gastos Firestore note:', err);
+    handleFirestoreError(err, OperationType.GET, path);
     return [];
   }
 }
 
-// Safe initial handshake on module load
-testConnection().catch(() => {});
+// Sincronización bidireccional automática y migración hacia cuenta de Google
+export async function sincronizarTodoConGoogle(
+  gastosLocales: Gasto[],
+  config: UsuarioConfig
+): Promise<{ gastos: Gasto[]; totalSubidos: number; totalDescargados: number }> {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      return { gastos: gastosLocales, totalSubidos: 0, totalDescargados: 0 };
+    }
+    const uid = user.uid;
+
+    // 1. Sincronizar perfil en users/{uid}
+    await syncUserProfileToFirestore(config, uid);
+
+    // 2. Obtener gastos remotos existentes en users/{uid}/gastos
+    const gastosRemotos = await fetchGastosFromFirestore(uid);
+    const mapaRemoto = new Map<string, Gasto>();
+    gastosRemotos.forEach((g) => mapaRemoto.set(g.id, g));
+
+    // 3. Subir todos los gastos locales a Firestore en su cuenta Google
+    let subidos = 0;
+    for (const g of gastosLocales) {
+      if (!mapaRemoto.has(g.id)) {
+        await syncGastoToFirestore(g, uid);
+        subidos++;
+      }
+    }
+
+    // 4. Descargar los que estén en remoto y no en local
+    const mapaLocal = new Map<string, Gasto>();
+    gastosLocales.forEach((g) => mapaLocal.set(g.id, g));
+
+    let descargados = 0;
+    const combinados = [...gastosLocales];
+    for (const r of gastosRemotos) {
+      if (!mapaLocal.has(r.id)) {
+        combinados.unshift(r);
+        descargados++;
+      }
+    }
+
+    return { gastos: combinados, totalSubidos: subidos, totalDescargados: descargados };
+  } catch (err) {
+    console.warn('Sync Todo con Google note:', err);
+    return { gastos: gastosLocales, totalSubidos: 0, totalDescargados: 0 };
+  }
+}
+

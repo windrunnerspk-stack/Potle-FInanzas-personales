@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { User } from 'firebase/auth';
 import {
   Settings,
   X,
@@ -16,7 +17,12 @@ import {
   Trash2,
   AlertTriangle,
   Crown,
-  Lock
+  Lock,
+  Cloud,
+  LogOut,
+  RefreshCw,
+  UserCheck,
+  CheckCircle2
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { UsuarioConfig } from '../types/finance';
@@ -35,6 +41,11 @@ interface SettingsModalProps {
   onDataReset: () => void;
   onOpenSyncSheets: () => void;
   onOpenPremium?: () => void;
+  currentUser?: User | null;
+  esInvitado?: boolean;
+  onConectarGoogle?: () => void;
+  onCerrarSesion?: () => void;
+  onSincronizarAhora?: () => Promise<void>;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -44,14 +55,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onDataReset,
   onOpenSyncSheets,
   onOpenPremium,
+  currentUser,
+  esInvitado,
+  onConectarGoogle,
+  onCerrarSesion,
+  onSincronizarAhora,
 }) => {
   const { isDark, toggleTheme } = useTheme();
   const [tab, setTab] = useState<'general' | 'datos' | 'desarrollo'>('general');
   const [moneda, setMoneda] = useState(config.moneda || 'USD');
-  const [email, setEmail] = useState(config.email || '');
+  const [email, setEmail] = useState(currentUser?.email || config.email || '');
   const [mostrarConfirmReset, setMostrarConfirmReset] = useState(false);
   const [copiadoSQL, setCopiadoSQL] = useState(false);
   const [guardadoExito, setGuardadoExito] = useState(false);
+  const [sincronizandoNube, setSincronizandoNube] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   const monedas = [
     { code: 'USD', symbol: '$', name: 'Dólar (USD)' },
@@ -239,6 +257,117 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Tarjeta de Cuenta de Google & Respaldo en la Nube */}
+              <div
+                className={`p-4 rounded-2xl border space-y-3 ${
+                  currentUser
+                    ? 'bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border-emerald-500/30'
+                    : isDark
+                    ? 'bg-neutral-950/60 border-neutral-800'
+                    : 'bg-amber-50/60 border-amber-200'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        currentUser
+                          ? 'bg-emerald-500/20 text-emerald-500'
+                          : 'bg-amber-500/20 text-amber-500'
+                      }`}
+                    >
+                      <Cloud size={18} />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold block">
+                        {currentUser ? 'Cuenta de Google Conectada' : 'Modo Invitado (Sin Respaldo)'}
+                      </span>
+                      <span className={`text-[11px] truncate block max-w-[200px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
+                        {currentUser ? currentUser.email : 'Tus datos solo residen en este dispositivo'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {currentUser ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/30 shrink-0">
+                      En la Nube ✓
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30 shrink-0">
+                      Local
+                    </span>
+                  )}
+                </div>
+
+                {/* Acciones de Cuenta */}
+                <div className="flex flex-wrap gap-2 pt-1 border-t border-inherit/20">
+                  {currentUser ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={sincronizandoNube}
+                        onClick={async () => {
+                          if (onSincronizarAhora) {
+                            setSincronizandoNube(true);
+                            setSyncFeedback(null);
+                            try {
+                              await onSincronizarAhora();
+                              setSyncFeedback('¡Facturas sincronizadas con Google!');
+                              setTimeout(() => setSyncFeedback(null), 3500);
+                            } catch {
+                              setSyncFeedback('Error al sincronizar.');
+                            } finally {
+                              setSincronizandoNube(false);
+                            }
+                          }
+                        }}
+                        className="py-1.5 px-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-emerald-500/30"
+                      >
+                        <RefreshCw size={13} className={sincronizandoNube ? 'animate-spin' : ''} />
+                        <span>{sincronizandoNube ? 'Sincronizando...' : 'Sincronizar Ahora'}</span>
+                      </button>
+
+                      {onCerrarSesion && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm('¿Cerrar sesión de Google?')) {
+                              onCerrarSesion();
+                              onClose();
+                            }
+                          }}
+                          className="py-1.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-neutral-700"
+                        >
+                          <LogOut size={13} />
+                          <span>Cerrar Sesión</span>
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    onConectarGoogle && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onConectarGoogle();
+                        }}
+                        className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                      >
+                        <Cloud size={14} />
+                        <span>Conectar Cuenta de Google y Respaldar Facturas</span>
+                      </button>
+                    )
+                  )}
+                </div>
+
+                {syncFeedback && (
+                  <p className="text-[11px] font-semibold text-emerald-500 flex items-center gap-1">
+                    <CheckCircle2 size={12} />
+                    <span>{syncFeedback}</span>
+                  </p>
+                )}
               </div>
 
               {/* Correo Electrónico & Estado Premium */}

@@ -40,7 +40,7 @@ service cloud.firestore {
         && data.ciudad is string && data.ciudad.size() <= 100
         && data.categoria is string && data.categoria.size() <= 100
         && data.metodo_pago is string && data.metodo_pago.size() <= 100
-        && data.total is number && data.total > 0;
+        && data.total is number && data.total >= 0;
     }
 
     // Default deny

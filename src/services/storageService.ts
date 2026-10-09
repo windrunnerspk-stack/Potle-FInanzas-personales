@@ -12,7 +12,8 @@ import {
   syncGastoToFirestore,
   deleteGastoFromFirestore,
   fetchGastosFromFirestore,
-  syncUserProfileToFirestore
+  syncUserProfileToFirestore,
+  sincronizarTodoConGoogle
 } from './firebase';
 
 const STORAGE_KEY_GASTOS = 'aura_finances_gastos_v1';
@@ -827,5 +828,16 @@ export function restaurarBackupCompletoJSON(jsonString: string): {
   } catch (err: any) {
     return { exito: false, gastosRestaurados: 0, error: err.message || 'Error al procesar el archivo.' };
   }
+}
+
+/**
+ * Sincroniza todos los gastos locales con la cuenta de Google en Firestore
+ */
+export async function sincronizarConCuentaGoogle(): Promise<{ gastos: Gasto[]; subidos: number; descargados: number }> {
+  const lista = obtenerGastos();
+  const conf = obtenerConfiguracion();
+  const res = await sincronizarTodoConGoogle(lista, conf);
+  localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(res.gastos));
+  return { gastos: res.gastos, subidos: res.totalSubidos, descargados: res.totalDescargados };
 }
 

@@ -5,12 +5,21 @@
 
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence } from 'motion/react';
+import { User } from 'firebase/auth';
 import { Gasto, UsuarioConfig } from './types/finance';
 import {
   obtenerGastos,
   obtenerConfiguracion,
-  esUsuarioAdmin
+  guardarConfiguracion,
+  esUsuarioAdmin,
+  sincronizarConCuentaGoogle
 } from './services/storageService';
+import {
+  auth,
+  onAuthStateChanged,
+  logoutUser,
+  loginWithGoogle
+} from './services/firebase';
 import { MobileFrame } from './components/MobileFrame';
 import { ExpenseList } from './components/ExpenseList';
 import { ExpenseCalendar } from './components/ExpenseCalendar';
@@ -19,10 +28,12 @@ import { ManualExpenseForm } from './components/ManualExpenseForm';
 import { ReceiptScanner } from './components/ReceiptScanner';
 import { SyncSheetModal } from './components/SyncSheetModal';
 import { SettingsModal } from './components/SettingsModal';
-import { OnboardingModal } from './components/OnboardingModal';
 import { PremiumProModal } from './components/PremiumProModal';
+import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
+import { CurrencySelectModal } from './components/CurrencySelectModal';
+import { AuraLogo } from './components/AuraLogo';
 import { useTheme } from './context/ThemeContext';
-import { Crown, Lock } from 'lucide-react';
+import { Crown, Lock, Cloud, RefreshCw } from 'lucide-react';
 
 export default function App() {
   const { isDark } = useTheme();
@@ -30,7 +41,20 @@ export default function App() {
   const [config, setConfig] = useState<UsuarioConfig>(obtenerConfiguracion());
   const [activeTab, setActiveTab] = useState<'gastos' | 'calendar' | 'analytics' | 'sync' | 'widgets'>('gastos');
 
-  // Modales
+  // Estado de Autenticación Real de Google y Modo Invitado
+  const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
+  const [esInvitado, setEsInvitado] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('aura_modo_invitado') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [authReady, setAuthReady] = useState(false);
+  const [sincronizandoGoogle, setSincronizandoGoogle] = useState(false);
+  const [mostrarAuthManual, setMostrarAuthManual] = useState(false);
+
+  // Modales secundarios
   const [mostrarSettings, setMostrarSettings] = useState(false);
   const [mostrarPremiumModal, setMostrarPremiumModal] = useState(false);
   const [mostrarFormGasto, setMostrarFormGasto] = useState(false);
@@ -39,24 +63,48 @@ export default function App() {
   const [mostrarSyncModal, setMostrarSyncModal] = useState(false);
   const [pestañaSyncModal, setPestañaSyncModal] = useState<'importar' | 'sheet' | 'email'>('importar');
 
-  const handleOpenImportSheet = (tab: 'importar' | 'sheet' | 'email' = 'importar') => {
-    setPestañaSyncModal(tab);
-    setMostrarSyncModal(true);
-  };
-
-  // Carga inicial
-  useEffect(() => {
-    recargarDatos();
-    const conf = obtenerConfiguracion();
-    setConfig(conf);
-  }, []);
-
   const recargarDatos = () => {
     const lista = obtenerGastos();
     setGastos(lista);
     const conf = obtenerConfiguracion();
     setConfig(conf);
   };
+
+  // Escuchador de Autenticación Firebase en Tiempo Real
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        setEsInvitado(false);
+        try {
+          localStorage.removeItem('aura_modo_invitado');
+        } catch {}
+
+        // Sincronizar automáticamente en la nube con su cuenta de Google
+        setSincronizandoGoogle(true);
+        try {
+          const syncRes = await sincronizarConCuentaGoogle();
+          if (syncRes.gastos) {
+            setGastos(syncRes.gastos);
+          }
+        } catch (e) {
+          console.warn('Sync on auth note:', e);
+        } finally {
+          setSincronizandoGoogle(false);
+        }
+
+        // Si el usuario es el admin o tiene correo, actualizar configuración
+        if (user.email) {
+          const conf = guardarConfiguracion({ email: user.email, modo: 'sincronizado' });
+          setConfig(conf);
+        }
+      }
+      setAuthReady(true);
+    });
+
+    recargarDatos();
+    return () => unsubscribe();
+  }, []);
 
   const handleOpenNewExpense = (prefill?: Partial<Gasto>) => {
     setValoresInicialesForm(prefill);
@@ -74,9 +122,83 @@ export default function App() {
     recargarDatos();
   };
 
-  const pendientesSync = gastos.filter((g) => !g.sincronizado).length;
-  const esAdmin = esUsuarioAdmin(config.email);
+  const handleOpenImportSheet = (tab: 'importar' | 'sheet' | 'email' = 'importar') => {
+    setPestañaSyncModal(tab);
+    setMostrarSyncModal(true);
+  };
 
+  const pendientesSync = gastos.filter((g) => !g.sincronizado).length;
+  const esAdmin = esUsuarioAdmin(currentUser?.email || config.email);
+
+  // 1. PANTALLA DE CARGA INICIAL (Espera de Firebase Auth)
+  if (!authReady) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center font-['Plus_Jakarta_Sans',sans-serif] ${isDark ? 'bg-[#090d16]' : 'bg-slate-50'}`}>
+        <div className="flex flex-col items-center gap-3">
+          <AuraLogo size={50} withGlow={true} />
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-500">
+            <RefreshCw size={14} className="animate-spin" />
+            <span>Iniciando Aura Finanzas...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. NUEVA PANTALLA DE INICIO OBLIGATORIA (Primera pantalla antes de cualquier otra cosa)
+  const sesionActiva = (!!currentUser || esInvitado) && !mostrarAuthManual;
+  if (!sesionActiva) {
+    return (
+      <AuthWelcomeScreen
+        onGoogleSuccess={async (user) => {
+          setCurrentUser(user);
+          setEsInvitado(false);
+          setMostrarAuthManual(false);
+          try {
+            localStorage.removeItem('aura_modo_invitado');
+          } catch {}
+          if (user.email) {
+            const conf = guardarConfiguracion({ email: user.email, modo: 'sincronizado' });
+            setConfig(conf);
+          }
+          try {
+            const syncRes = await sincronizarConCuentaGoogle();
+            if (syncRes.gastos) {
+              setGastos(syncRes.gastos);
+            }
+          } catch (e) {
+            console.warn('Sync note:', e);
+          }
+          recargarDatos();
+        }}
+        onGuestSelected={() => {
+          setEsInvitado(true);
+          setMostrarAuthManual(false);
+          try {
+            localStorage.setItem('aura_modo_invitado', 'true');
+          } catch {}
+          const conf = guardarConfiguracion({ modo: 'local' });
+          setConfig(conf);
+        }}
+      />
+    );
+  }
+
+  // 3. SELECCIÓN DE MONEDA (Solo si es la primera apertura y aún no se completó)
+  if (!config.onboarding_completado) {
+    return (
+      <CurrencySelectModal
+        config={config}
+        userEmail={currentUser?.email}
+        onComplete={(nuevaConf) => {
+          setConfig(nuevaConf);
+          recargarDatos();
+        }}
+      />
+    );
+  }
+
+  // 4. PANTALLA PRINCIPAL DE LA APLICACIÓN
   return (
     <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'bg-[#090d16]' : 'bg-slate-50'}`}>
       <MobileFrame
@@ -89,15 +211,58 @@ export default function App() {
         esAdmin={esAdmin}
         pendientesSync={pendientesSync}
       >
-        {/* Barra sutil de estado y acceso a la tuerca */}
-        <div className="mb-3 flex items-center justify-between text-xs px-1">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-              {gastos.length === 0 ? 'Sin facturas aún (Listo para registrar)' : `${gastos.length} comprobantes`}
-            </span>
+        {/* Barra superior de estado de sincronización y cuenta */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs px-1">
+          {/* Indicador de Facturas y Estado Cloud */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
+                {gastos.length === 0 ? 'Sin facturas aún' : `${gastos.length} comprobantes`}
+              </span>
+            </div>
+
+            {/* Estado de sincronización en tiempo real */}
+            {currentUser ? (
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold"
+                title={`Sincronizado en la nube con ${currentUser.email}`}
+              >
+                <Cloud size={12} className={sincronizandoGoogle ? 'animate-pulse text-emerald-400' : 'shrink-0'} />
+                <span className="truncate max-w-[130px] sm:max-w-[190px]">
+                  {currentUser.email?.split('@')[0]}
+                </span>
+                <span className="text-[10px] opacity-75 font-mono">✓</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const resp = await loginWithGoogle();
+                    if (resp.success && auth.currentUser) {
+                      setCurrentUser(auth.currentUser);
+                      setEsInvitado(false);
+                      try {
+                        localStorage.removeItem('aura_modo_invitado');
+                      } catch {}
+                      await sincronizarConCuentaGoogle();
+                      recargarDatos();
+                    }
+                  } catch (e) {
+                    console.warn('Connect Google error:', e);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 hover:bg-amber-500/20 text-[11px] font-bold transition-all cursor-pointer"
+                title="Tus datos están en modo local. Toca para conectar con Google y respaldar en la nube"
+              >
+                <Cloud size={12} />
+                <span>Modo Local • Conectar Google</span>
+              </button>
+            )}
           </div>
 
+          {/* Accesos rápidos: Pro y Ajustes */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setMostrarPremiumModal(true)}
@@ -148,7 +313,6 @@ export default function App() {
         {/* Tab 4: Sync con Google Sheets */}
         {activeTab === 'sync' && (
           <div className="space-y-4 pb-20">
-            {/* Tarjeta de Sincronización Google Sheets */}
             <div
               className={`p-4 rounded-3xl border shadow-sm transition-colors space-y-3 ${
                 isDark
@@ -183,16 +347,47 @@ export default function App() {
         )}
       </MobileFrame>
 
-      {/* Modales */}
+      {/* Modales de la aplicación */}
       <AnimatePresence>
         {mostrarSettings && (
           <SettingsModal
             config={config}
+            currentUser={currentUser}
+            esInvitado={esInvitado}
             onClose={() => setMostrarSettings(false)}
             onConfigUpdated={(nuevaConf) => setConfig(nuevaConf)}
             onDataReset={recargarDatos}
             onOpenSyncSheets={() => handleOpenImportSheet('sheet')}
             onOpenPremium={() => setMostrarPremiumModal(true)}
+            onConectarGoogle={async () => {
+              try {
+                const resp = await loginWithGoogle();
+                if (resp.success && auth.currentUser) {
+                  setCurrentUser(auth.currentUser);
+                  setEsInvitado(false);
+                  try {
+                    localStorage.removeItem('aura_modo_invitado');
+                  } catch {}
+                  await sincronizarConCuentaGoogle();
+                  recargarDatos();
+                }
+              } catch (e) {
+                console.warn('Connect Google error:', e);
+              }
+            }}
+            onCerrarSesion={async () => {
+              await logoutUser();
+              setCurrentUser(null);
+              setEsInvitado(false);
+              try {
+                localStorage.removeItem('aura_modo_invitado');
+              } catch {}
+              setMostrarAuthManual(true);
+            }}
+            onSincronizarAhora={async () => {
+              await sincronizarConCuentaGoogle();
+              recargarDatos();
+            }}
           />
         )}
 
@@ -234,16 +429,6 @@ export default function App() {
             pestañaInicial={pestañaSyncModal}
             onClose={() => setMostrarSyncModal(false)}
             onSynced={() => recargarDatos()}
-          />
-        )}
-
-        {!config.onboarding_completado && (
-          <OnboardingModal
-            config={config}
-            onComplete={(nuevaConf) => {
-              setConfig(nuevaConf);
-              recargarDatos();
-            }}
           />
         )}
       </AnimatePresence>
