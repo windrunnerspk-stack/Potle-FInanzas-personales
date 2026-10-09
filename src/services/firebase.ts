@@ -170,6 +170,7 @@ export type GoogleAuthFailureCause =
   | 'popup_blocked'
   | 'popup_closed'
   | 'network_error'
+  | 'app_in_testing'
   | 'unknown';
 
 export interface GoogleLoginResult {
@@ -267,8 +268,22 @@ export async function loginWithGoogle(): Promise<GoogleLoginResult> {
     const lowerMsg = rawMsg.toLowerCase();
     const lowerCode = code.toLowerCase();
 
-    // 1. Verificación de 'invalid_client_id'
+    // 1. Verificación de aplicación en modo Tester / Acceso bloqueado por Google OAuth
     if (
+      lowerMsg.includes('testing') ||
+      lowerMsg.includes('tester') ||
+      lowerMsg.includes('probando') ||
+      lowerMsg.includes('access_denied') ||
+      lowerMsg.includes('unverified') ||
+      lowerCode.includes('access-denied') ||
+      (customData && JSON.stringify(customData).toLowerCase().includes('testing'))
+    ) {
+      detectedCause = 'app_in_testing';
+      friendlyError = 'La app está en modo "En prueba" (Testing) en Google Cloud. Solo los usuarios agregados como Test users pueden entrar. Pulsa "Publicar aplicación" para pasar a producción o usa el ingreso directo.';
+      esConfig = true;
+    }
+    // 2. Verificación de 'invalid_client_id'
+    else if (
       lowerCode.includes('invalid-oauth-client-id') ||
       lowerCode.includes('invalid-client') ||
       lowerMsg.includes('invalid_client_id') ||
@@ -281,7 +296,7 @@ export async function loginWithGoogle(): Promise<GoogleLoginResult> {
       friendlyError = 'Error OAuth 2.0: Client ID inválido o no configurado en Google Cloud / Firebase.';
       esConfig = true;
     }
-    // 2. Verificación de 'unauthorized_redirect_uri' (URL de redirección no autorizada)
+    // 3. Verificación de 'unauthorized_redirect_uri' (URL de redirección no autorizada)
     else if (
       lowerCode === 'auth/unauthorized-domain' ||
       lowerMsg.includes('unauthorized-domain') ||
@@ -294,7 +309,7 @@ export async function loginWithGoogle(): Promise<GoogleLoginResult> {
       friendlyError = `URL de redirección u origen no autorizado (${currentOrigin}). Agrega el dominio a 'Authorized domains' en Firebase Console.`;
       esConfig = true;
     }
-    // 3. Verificación de 'configuration_not_found' o proveedor no habilitado
+    // 4. Verificación de 'configuration_not_found' o proveedor no habilitado ("The requested action is invalid")
     else if (
       lowerCode === 'auth/configuration-not-found' ||
       lowerCode === 'auth/operation-not-allowed' ||
@@ -305,7 +320,7 @@ export async function loginWithGoogle(): Promise<GoogleLoginResult> {
       lowerMsg.includes('invalid-action')
     ) {
       detectedCause = 'configuration_not_found';
-      friendlyError = 'Google Authentication no está habilitado o la configuración de proveedor no fue encontrada en Firebase Console.';
+      friendlyError = 'Google Authentication no está habilitado en Firebase Console ("The requested action is invalid"). Debe habilitarse en Sign-in method.';
       esConfig = true;
     }
     // 4. Ventana emergente cerrada o bloqueada
@@ -440,8 +455,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // Safe authentication resolver: never throws auth/admin-restricted-operation
 export async function ensureAuthUser(): Promise<AppUserSession> {
-  if (cachedUser) {
-    return cachedUser;
+  const existing = getCachedUser();
+  if (existing) {
+    return existing;
   }
 
   // 1. If Firebase Auth already has a user signed in
