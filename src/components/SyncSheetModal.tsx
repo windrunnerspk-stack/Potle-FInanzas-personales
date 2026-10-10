@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import confetti from 'canvas-confetti';
 import {
   FileSpreadsheet,
   Mail,
@@ -816,28 +817,106 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                   <input
                     type="url"
                     value={urlSheet}
-                    onChange={(e) => setUrlSheet(e.target.value)}
-                    placeholder="https://docs.google.com/spreadsheets/d/TU_ID_DE_HOJA/edit"
-                    className={`flex-1 w-full px-3 py-2 rounded-xl border text-xs focus:outline-none ${
+                    onChange={(e) => {
+                      const nuevoUrl = e.target.value;
+                      setUrlSheet(nuevoUrl);
+                      const match = nuevoUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+                      if (match && match[1]) {
+                        guardarConfiguracion({ google_sheets_id: match[1] });
+                      }
+                    }}
+                    placeholder="https://docs.google.com/spreadsheets/d/1cuPkxZZY5HOKu.../edit"
+                    className={`flex-1 w-full px-3.5 py-2.5 rounded-xl border text-xs focus:outline-none transition-all ${
                       isDark
-                        ? 'bg-neutral-900 text-white placeholder-neutral-500 border-neutral-700'
-                        : 'bg-white text-slate-900 placeholder-slate-400 border-slate-300'
+                        ? 'bg-neutral-900 text-white placeholder-neutral-500 border-neutral-700 focus:border-emerald-500'
+                        : 'bg-white text-slate-900 placeholder-slate-400 border-slate-300 focus:border-emerald-500'
                     }`}
                   />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const match = urlSheet.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-                      const idExtraido = match ? match[1] : urlSheet.trim();
-                      guardarConfiguracion({ google_sheets_id: idExtraido });
-                      setMensajeExito('¡Tu Google Sheet personal ha sido vinculado con éxito!');
-                      onSynced();
-                    }}
-                    className="w-full sm:w-auto px-3.5 py-2 rounded-xl text-xs font-bold bg-neutral-800 hover:bg-neutral-700 text-white border border-neutral-700 transition-all cursor-pointer whitespace-nowrap"
-                  >
-                    Guardar Hoja
-                  </button>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const match = urlSheet.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+                        const idExtraido = match ? match[1] : urlSheet.trim();
+                        if (!idExtraido) {
+                          setMensajeExito('Por favor pega un enlace válido de Google Sheets.');
+                          return;
+                        }
+                        guardarConfiguracion({ google_sheets_id: idExtraido });
+                        
+                        // Acción automática 1: Copiar las 18 columnas con formato TSV para Google Sheets
+                        const tsv = exportarGastosParaGoogleSheetsTSV(gastos);
+                        navigator.clipboard.writeText(tsv);
+                        
+                        // Acción automática 2: Abrir la hoja del usuario en pestaña nueva
+                        const targetUrl = urlSheet.startsWith('http')
+                          ? urlSheet
+                          : `https://docs.google.com/spreadsheets/d/${idExtraido}/edit`;
+                        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+                        
+                        // Acción automática 3: Marcar como sincronizado
+                        sincronizarTodoConGoogleSheets();
+                        onSynced();
+
+                        try {
+                          confetti({
+                            particleCount: 40,
+                            spread: 60,
+                            origin: { y: 0.7 },
+                            colors: ['#10b981', '#14b8a6', '#06b6d4'],
+                          });
+                        } catch {}
+
+                        setMensajeExito(
+                          `¡Listo! Tus ${gastos.length} facturas con las 18 columnas se copiaron a tu portapapeles y se abrió tu Google Sheet. Solo haz clic en la celda A1 y presiona Pegar (Ctrl+V).`
+                        );
+                      }}
+                      className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 text-neutral-950 hover:brightness-110 shadow-md shadow-emerald-500/20 transition-all cursor-pointer whitespace-nowrap active:scale-95 flex items-center justify-center gap-1.5"
+                    >
+                      <Upload size={14} />
+                      <span>Cargar Datos al Sheet (1 Clic)</span>
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const match = urlSheet.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+                        const idExtraido = match ? match[1] : urlSheet.trim();
+                        if (idExtraido) {
+                          guardarConfiguracion({ google_sheets_id: idExtraido });
+                        }
+                        setPestaña('importar');
+                        setMetodoImportacion('url');
+                        if (urlSheet.trim()) {
+                          handleCargarUrl();
+                        }
+                      }}
+                      className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap active:scale-95 flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border-neutral-700"
+                      title="Descargar las facturas desde Google Sheets a esta app"
+                    >
+                      <Download size={14} />
+                      <span>Traer del Sheet</span>
+                    </button>
+                  </div>
                 </div>
+
+                {config.google_sheets_id && (
+                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-neutral-800/40">
+                    <span className="text-emerald-500 font-medium flex items-center gap-1">
+                      <CheckCircle2 size={12} />
+                      Hoja vinculada: <code className="bg-emerald-500/10 px-1 py-0.5 rounded text-[10px] font-mono">{config.google_sheets_id.slice(0, 16)}...</code>
+                    </span>
+                    <a
+                      href={`https://docs.google.com/spreadsheets/d/${config.google_sheets_id}/edit`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-400 hover:underline inline-flex items-center gap-0.5 font-semibold"
+                    >
+                      <span>Abrir Hoja</span>
+                      <ExternalLink size={10} />
+                    </a>
+                  </div>
+                )}
               </div>
 
               {/* Botonera de Sincronización, Link directo a Sheets y Exportación CSV Local */}

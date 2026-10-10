@@ -93,12 +93,18 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
       const dataUrlComprimida = await comprimirImagen(file, 750, 750, 0.55);
       setImagenPreviewUrl(dataUrlComprimida);
 
-      // Identificar si el nombre del archivo contiene pistas (ej. Terpel, Exito, Farmacia)
-      const nombreArchivo = file.name.replace(/\.[^/.]+$/, '');
+      // Identificar si el nombre del archivo contiene pistas reales de comercio o si es un nombre genérico de cámara móvil
+      const nombreBruto = file.name.replace(/\.[^/.]+$/, '').trim();
+      const esGenerico =
+        !nombreBruto ||
+        /^(img|image|photo|foto|cam|camera|pxl|capture|screenshot|\d{4}|\d{8})/i.test(nombreBruto) ||
+        /^\d+$/.test(nombreBruto.replace(/[^0-9]/g, ''));
+
+      const nombreComercio = !esGenerico && nombreBruto.length > 2 ? nombreBruto : 'Comercio Local';
       const hoyStr = new Date().toISOString().split('T')[0];
       const horaStr = new Date().toTimeString().slice(0, 5);
 
-      const textoBase = `FACTURA DE COMPRA\nESTABLECIMIENTO: ${nombreArchivo || 'Comercio Local'}\nFECHA: ${hoyStr}\nHORA: ${horaStr}\nTOTAL FACTURA: $ 45000\nMEDIO DE PAGO: TARJETA DEBITO`;
+      const textoBase = `FACTURA DE COMPRA\nESTABLECIMIENTO: ${nombreComercio}\nFECHA: ${hoyStr}\nHORA: ${horaStr}\nTOTAL FACTURA: $ 45000\nMEDIO DE PAGO: TARJETA DEBITO`;
       ejecutarOCR(textoBase, dataUrlComprimida);
     } catch (err: any) {
       console.warn('Error leyendo comprobante:', err);
@@ -406,6 +412,10 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
                       value={establecimientoEditado}
                       onChange={(e) => setEstablecimientoEditado(e.target.value)}
                       placeholder="Nombre del comercio"
+                      autoComplete="organization"
+                      autoCorrect="on"
+                      spellCheck={true}
+                      autoCapitalize="words"
                       className={`w-full px-2.5 py-1.5 rounded-xl border text-xs font-semibold focus:outline-none ${
                         isDark
                           ? 'bg-neutral-900 border-neutral-700 text-white focus:border-emerald-500'
@@ -448,6 +458,10 @@ export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
                       value={nitEditado}
                       onChange={(e) => setNitEditado(e.target.value)}
                       placeholder="Ej: 860.005.224-6"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      inputMode="text"
                       className={`w-full px-2.5 py-1.5 rounded-xl border text-xs font-mono focus:outline-none ${
                         isDark
                           ? 'bg-neutral-900 border-neutral-700 text-white focus:border-emerald-500'

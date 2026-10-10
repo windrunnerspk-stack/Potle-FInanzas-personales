@@ -121,11 +121,6 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
   const validar = (): boolean => {
     const nuevosErrores: Record<string, string> = {};
 
-    if (!establecimiento.trim()) nuevosErrores.establecimiento = 'El establecimiento es obligatorio';
-    if (!fecha) nuevosErrores.fecha = 'La fecha es obligatoria';
-    if (!hora) nuevosErrores.hora = 'La hora es obligatoria';
-    if (!ciudad.trim()) nuevosErrores.ciudad = 'La ciudad es obligatoria';
-
     const numTotal = parsearMonto(total);
     if (!total || numTotal <= 0) {
       nuevosErrores.total = 'Ingresa un monto válido mayor a 0';
@@ -143,10 +138,17 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
     }
     setErrorBanner(null);
 
-    if (!validar()) {
-      setErrorBanner('Por favor revisa los campos requeridos en rojo antes de guardar.');
+    const montoFinal = parsearMonto(total);
+    if (montoFinal <= 0) {
+      setErrorBanner('Por favor ingresa un monto total válido mayor a $0.');
+      setErrores({ total: 'Ingresa un monto mayor a 0' });
       return;
     }
+
+    const estFinal = establecimiento.trim() || 'Comercio Local';
+    const ciuFinal = ciudad.trim() || 'Bogotá';
+    const fecFinal = fecha || fechaHoy;
+    const horFinal = hora || horaActual;
 
     setGuardando(true);
     try {
@@ -160,17 +162,16 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
         }
       }
 
-      const montoFinal = parsearMonto(total);
       let gastoResultado: Gasto;
 
       if (esEdicion && initialValues?.id) {
         gastoResultado = actualizarGasto({
           ...(initialValues as Gasto),
           id: initialValues.id,
-          establecimiento: establecimiento.trim(),
-          fecha,
-          hora,
-          ciudad: ciudad.trim() || 'Bogotá',
+          establecimiento: estFinal,
+          fecha: fecFinal,
+          hora: horFinal,
+          ciudad: ciuFinal,
           nit: nit.trim(),
           categoria,
           metodo_pago: metodoPago,
@@ -180,10 +181,10 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
         });
       } else {
         gastoResultado = guardarGasto({
-          establecimiento: establecimiento.trim(),
-          fecha,
-          hora,
-          ciudad: ciudad.trim() || 'Bogotá',
+          establecimiento: estFinal,
+          fecha: fecFinal,
+          hora: horFinal,
+          ciudad: ciuFinal,
           nit: nit.trim(),
           categoria,
           metodo_pago: metodoPago,
@@ -222,12 +223,12 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75">
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 26, stiffness: 280 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
         className={`w-full max-w-lg border-t sm:border rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden ${
           isDark
             ? 'bg-neutral-900 border-neutral-800 text-neutral-100'
@@ -380,6 +381,10 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
                   value={establecimiento}
                   onChange={(e) => setEstablecimiento(e.target.value)}
                   placeholder="Nombre del comercio"
+                  autoComplete="organization"
+                  autoCorrect="on"
+                  spellCheck={true}
+                  autoCapitalize="words"
                   className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none ${
                     isDark
                       ? `bg-neutral-950/70 text-white placeholder-neutral-500 ${
@@ -433,6 +438,10 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
                   value={nit}
                   onChange={(e) => setNit(e.target.value)}
                   placeholder="Ej. 860.005.224-6 (opcional)"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  inputMode="text"
                   className={`w-full pl-10 pr-4 py-3 rounded-xl border text-sm transition-all focus:outline-none ${
                     isDark
                       ? 'bg-neutral-950/70 text-white placeholder-neutral-500 border-neutral-800 focus:border-emerald-500'
@@ -507,6 +516,10 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
                   value={ciudad}
                   onChange={(e) => setCiudad(e.target.value)}
                   placeholder="Bogotá"
+                  autoComplete="address-level2"
+                  autoCorrect="on"
+                  spellCheck={true}
+                  autoCapitalize="words"
                   className={`w-full pl-10 pr-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:border-emerald-500 ${
                     isDark
                       ? 'bg-neutral-950/70 border-neutral-800 text-white'
@@ -584,6 +597,10 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
                 value={observaciones}
                 onChange={(e) => setObservaciones(e.target.value)}
                 placeholder="Notas de la factura, personas con quienes se compartió, etc."
+                autoComplete="on"
+                autoCorrect="on"
+                spellCheck={true}
+                autoCapitalize="sentences"
                 className={`w-full p-3 rounded-xl border text-xs focus:outline-none focus:border-emerald-500 resize-none ${
                   isDark
                     ? 'bg-neutral-950/70 border-neutral-800 text-white placeholder-neutral-500'

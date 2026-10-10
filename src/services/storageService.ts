@@ -143,8 +143,7 @@ export function eliminarCategoria(nombre: string): { exito: boolean; categorias:
 // ============================================================
 
 /**
- * Detecta y elimina gastos corruptos o fantasmas (por ejemplo facturas importadas con NIT
- * interpretado erróneamente como total de 10 millones en 'Otros' o fechas en el establecimiento)
+ * Función opcional de saneamiento de datos si el usuario lo solicita explícitamente en Ajustes
  */
 export function limpiarGastosCorruptos(): { eliminados: number; totalRestante: number } {
   try {
@@ -153,25 +152,17 @@ export function limpiarGastosCorruptos(): { eliminados: number; totalRestante: n
     const lista: Gasto[] = JSON.parse(raw);
     if (!Array.isArray(lista)) return { eliminados: 0, totalRestante: 0 };
 
+    // Solo filtrar registros completamente vacíos sin establecimiento ni monto
     const limpia = lista.filter((g) => {
-      // Condición 1: Categoría 'Otros' con montos exorbitantes (>= $5.000.000 COP) generados por error de NIT/offset
-      const esOtrosExorbitante = (g.categoria === 'Otros' || g.categoria === 'Otro') && g.total >= 5000000;
-      // Condición 2: Establecimiento corrupto que es fecha, hora o puro número NIT
-      const est = String(g.establecimiento || '');
-      const esEstablecimientoCorrupto =
-        /^\d{4}-\d{2}-\d{2}/.test(est) ||
-        /^\d{8,12}$/.test(est.replace(/[^0-9]/g, ''));
-
-      return !esOtrosExorbitante && !esEstablecimientoCorrupto;
+      const tieneNombre = Boolean(g.establecimiento && String(g.establecimiento).trim());
+      const tieneMonto = typeof g.total === 'number' && g.total > 0;
+      return tieneNombre || tieneMonto;
     });
 
     const eliminados = lista.length - limpia.length;
     if (eliminados > 0) {
       localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(limpia));
-      const borrados = lista.filter((g) => !limpia.some((l) => l.id === g.id));
-      borrados.forEach((b) => deleteGastoFromFirestore(b.id).catch(() => {}));
     }
-
     return { eliminados, totalRestante: limpia.length };
   } catch {
     return { eliminados: 0, totalRestante: 0 };
@@ -188,26 +179,8 @@ export function obtenerGastos(): Gasto[] {
     const lista = JSON.parse(raw);
     if (!Array.isArray(lista)) return SEED_GASTOS;
 
-    // Sanear gastos corruptos al vuelo si existen
-    let procesada = lista;
-    const tieneCorruptos = lista.some(
-      (g: Gasto) =>
-        ((g.categoria === 'Otros' || g.categoria === 'Otro') && g.total >= 5000000) ||
-        /^\d{4}-\d{2}-\d{2}/.test(g.establecimiento || '')
-    );
-    if (tieneCorruptos) {
-      procesada = lista.filter(
-        (g: Gasto) =>
-          !((g.categoria === 'Otros' || g.categoria === 'Otro') && g.total >= 5000000) &&
-          !/^\d{4}-\d{2}-\d{2}/.test(g.establecimiento || '')
-      );
-      localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(procesada));
-      const borrados = lista.filter((g: Gasto) => !procesada.some((p: Gasto) => p.id === g.id));
-      borrados.forEach((b: Gasto) => deleteGastoFromFirestore(b.id).catch(() => {}));
-    }
-
-    // Normalizar categorías al vuelo para garantizar congruencia con las 23 categorías
-    return procesada.map((g: Gasto) => ({
+    // Normalizar categorías al vuelo para garantizar congruencia con las 23 categorías oficiales
+    return lista.map((g: Gasto) => ({
       ...g,
       categoria: normalizarCategoria(g.categoria),
     }));

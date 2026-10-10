@@ -662,6 +662,10 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Buscar por comercio (ej. 'Terpel'), NIT, ciudad..."
+              autoComplete="off"
+              autoCorrect="on"
+              spellCheck={true}
+              autoCapitalize="none"
               className={`w-full pl-10 pr-10 py-3 rounded-2xl border text-sm transition-colors focus:outline-none focus:border-emerald-500 ${
                 isDark
                   ? 'bg-neutral-900 border-neutral-800 text-white placeholder-neutral-500'
