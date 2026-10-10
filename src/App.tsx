@@ -391,6 +391,10 @@ export default function App() {
           <ReceiptScanner
             onCancel={() => setMostrarScanner(false)}
             onScanComplete={handleScanComplete}
+            onSavedDirectly={() => {
+              setMostrarScanner(false);
+              recargarDatos();
+            }}
           />
         )}
 

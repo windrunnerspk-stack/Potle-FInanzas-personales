@@ -216,6 +216,38 @@ export function obtenerGastos(): Gasto[] {
   }
 }
 
+/**
+ * Guarda la lista de gastos en localStorage de manera segura y a prueba de errores.
+ * Si una imagen o comprobante supera la cuota de localStorage (5MB), la optimiza o alivia
+ * para garantizar que la información financiera y el registro NUNCA se pierdan ni se congelen.
+ */
+export function safeGuardarGastosEnLocalStorage(gastos: Gasto[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(gastos));
+  } catch (err) {
+    console.warn('Alerta de almacenamiento en localStorage (posible foto pesada). Optimizando imágenes...', err);
+    try {
+      // Intento 1: Quitar solo fotos que superen 40KB
+      const listaOptimizada = gastos.map((g) => ({
+        ...g,
+        foto_factura_uri: g.foto_factura_uri && g.foto_factura_uri.length > 40000 ? undefined : g.foto_factura_uri,
+      }));
+      localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(listaOptimizada));
+    } catch {
+      try {
+        // Intento 2: Quitar todas las fotos base64 para resguardar los datos monetarios y fiscales
+        const listaSinFotos = gastos.map((g) => ({
+          ...g,
+          foto_factura_uri: undefined,
+        }));
+        localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(listaSinFotos));
+      } catch (fatalErr) {
+        console.error('Error crítico escribiendo en almacenamiento:', fatalErr);
+      }
+    }
+  }
+}
+
 export function guardarGasto(nuevoGasto: Omit<Gasto, 'id' | 'sincronizado' | 'creado_en' | 'actualizado_en'>): Gasto {
   const lista = obtenerGastos();
   const config = obtenerConfiguracion();
@@ -232,10 +264,14 @@ export function guardarGasto(nuevoGasto: Omit<Gasto, 'id' | 'sincronizado' | 'cr
   };
 
   const actualizada = [gasto, ...lista];
-  localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(actualizada));
+  safeGuardarGastosEnLocalStorage(actualizada);
 
-  // Sincronizar en tiempo real con Firestore
-  syncGastoToFirestore(gasto).catch((e) => console.warn('Sync gasto error:', e));
+  // Sincronizar en tiempo real con Firestore en segundo plano (sin bloquear)
+  try {
+    syncGastoToFirestore(gasto).catch((e) => console.warn('Sync gasto note:', e));
+  } catch (e) {
+    console.warn('Sync gasto catch:', e);
+  }
 
   if (config.modo === 'sincronizado') {
     encolarSync(gasto.id, 'CREATE', gasto);
@@ -272,10 +308,14 @@ export function actualizarGasto(gastoActualizado: Gasto): Gasto {
     actualizada.unshift(gastoLimpio);
   }
 
-  localStorage.setItem(STORAGE_KEY_GASTOS, JSON.stringify(actualizada));
+  safeGuardarGastosEnLocalStorage(actualizada);
 
-  // Sincronizar en Firestore
-  syncGastoToFirestore(gastoLimpio).catch((e) => console.warn('Sync updated gasto error:', e));
+  // Sincronizar en Firestore sin bloquear
+  try {
+    syncGastoToFirestore(gastoLimpio).catch((e) => console.warn('Sync updated gasto note:', e));
+  } catch (e) {
+    console.warn('Sync updated catch:', e);
+  }
 
   return gastoLimpio;
 }

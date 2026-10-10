@@ -28,6 +28,7 @@ import {
 import { CategoryIcon } from './CategoryIcon';
 import { guardarGasto, actualizarGasto, formatearMoneda } from '../services/storageService';
 import { useTheme } from '../context/ThemeContext';
+import { comprimirImagen } from '../utils/imageCompressor';
 
 interface ManualExpenseFormProps {
   initialValues?: Partial<Gasto>;
@@ -64,11 +65,13 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
   const [metodoPago, setMetodoPago] = useState<MetodoPago>(initialValues?.metodo_pago || 'Tarjeta Débito');
   const [total, setTotal] = useState<string>(initialValues?.total ? String(initialValues.total) : '');
   const [observaciones, setObservaciones] = useState(initialValues?.observaciones || '');
-  const [fotoFacturaUri] = useState<string | undefined>(initialValues?.foto_factura_uri);
+  const [fotoFacturaUri, setFotoFacturaUri] = useState<string | undefined>(initialValues?.foto_factura_uri);
 
   const [selectorCategoriaAbierto, setSelectorCategoriaAbierto] = useState(false);
   const [filtroCategoria, setFiltroCategoria] = useState('');
   const [errores, setErrores] = useState<Record<string, string>>({});
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     if (initialValues) {
@@ -79,10 +82,41 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
       if (initialValues.nit !== undefined) setNit(initialValues.nit);
       if (initialValues.categoria !== undefined) setCategoria(initialValues.categoria);
       if (initialValues.metodo_pago !== undefined) setMetodoPago(initialValues.metodo_pago);
-      if (initialValues.total !== undefined) setTotal(String(initialValues.total));
+      if (initialValues.total !== undefined && initialValues.total !== null) setTotal(String(initialValues.total));
       if (initialValues.observaciones !== undefined) setObservaciones(initialValues.observaciones);
+      if (initialValues.foto_factura_uri !== undefined) setFotoFacturaUri(initialValues.foto_factura_uri);
     }
   }, [initialValues]);
+
+  // Parser robusto para montos en pesos o monedas con separadores de miles y decimales
+  const parsearMonto = (val: string): number => {
+    if (!val) return 0;
+    let s = String(val).trim().replace(/[$\s]/g, '');
+    if (!s) return 0;
+
+    // Caso latino: 145.000 o 145.000,50
+    if (s.includes('.') && s.includes(',')) {
+      if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+        s = s.replace(/\./g, '').replace(',', '.');
+      } else {
+        s = s.replace(/,/g, '');
+      }
+    } else if (s.includes('.')) {
+      const partes = s.split('.');
+      if (partes.length > 1 && partes[partes.length - 1].length === 3) {
+        s = s.replace(/\./g, '');
+      }
+    } else if (s.includes(',')) {
+      const partes = s.split(',');
+      if (partes.length > 1 && partes[partes.length - 1].length === 3) {
+        s = s.replace(/,/g, '');
+      } else {
+        s = s.replace(/,/g, '.');
+      }
+    }
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  };
 
   const validar = (): boolean => {
     const nuevosErrores: Record<string, string> = {};
@@ -91,10 +125,10 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
     if (!fecha) nuevosErrores.fecha = 'La fecha es obligatoria';
     if (!hora) nuevosErrores.hora = 'La hora es obligatoria';
     if (!ciudad.trim()) nuevosErrores.ciudad = 'La ciudad es obligatoria';
-    // El NIT es opcional
-    const numTotal = parseFloat(total);
-    if (!total || isNaN(numTotal) || numTotal <= 0) {
-      nuevosErrores.total = 'Ingresa un monto numérico mayor a cero';
+
+    const numTotal = parsearMonto(total);
+    if (!total || numTotal <= 0) {
+      nuevosErrores.total = 'Ingresa un monto válido mayor a 0';
     }
 
     setErrores(nuevosErrores);
@@ -103,50 +137,78 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
 
   const esEdicion = Boolean(initialValues?.id);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validar()) return;
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e && e.preventDefault) {
+      e.preventDefault();
+    }
+    setErrorBanner(null);
 
-    let gastoResultado: Gasto;
-
-    if (esEdicion && initialValues?.id) {
-      gastoResultado = actualizarGasto({
-        ...(initialValues as Gasto),
-        id: initialValues.id,
-        establecimiento: establecimiento.trim(),
-        fecha,
-        hora,
-        ciudad: ciudad.trim(),
-        nit: nit.trim(),
-        categoria,
-        metodo_pago: metodoPago,
-        total: parseFloat(total),
-        observaciones: observaciones.trim() || undefined,
-        foto_factura_uri: fotoFacturaUri,
-      });
-    } else {
-      gastoResultado = guardarGasto({
-        establecimiento: establecimiento.trim(),
-        fecha,
-        hora,
-        ciudad: ciudad.trim(),
-        nit: nit.trim(),
-        categoria,
-        metodo_pago: metodoPago,
-        total: parseFloat(total),
-        observaciones: observaciones.trim() || undefined,
-        foto_factura_uri: fotoFacturaUri,
-      });
+    if (!validar()) {
+      setErrorBanner('Por favor revisa los campos requeridos en rojo antes de guardar.');
+      return;
     }
 
-    confetti({
-      particleCount: 45,
-      spread: 60,
-      origin: { y: 0.8 },
-      colors: ['#10b981', '#14b8a6', '#06b6d4', '#f59e0b'],
-    });
+    setGuardando(true);
+    try {
+      // Optimizar imagen si viene en base64 para que jamás exceda la cuota de localStorage
+      let fotoOptimizada = fotoFacturaUri;
+      if (fotoOptimizada && fotoOptimizada.length > 40000 && fotoOptimizada.startsWith('data:image')) {
+        try {
+          fotoOptimizada = await comprimirImagen(fotoOptimizada, 700, 700, 0.5);
+        } catch {
+          // Si falla compresión, mantener o quitar para resguardar
+        }
+      }
 
-    onSaved(gastoResultado);
+      const montoFinal = parsearMonto(total);
+      let gastoResultado: Gasto;
+
+      if (esEdicion && initialValues?.id) {
+        gastoResultado = actualizarGasto({
+          ...(initialValues as Gasto),
+          id: initialValues.id,
+          establecimiento: establecimiento.trim(),
+          fecha,
+          hora,
+          ciudad: ciudad.trim() || 'Bogotá',
+          nit: nit.trim(),
+          categoria,
+          metodo_pago: metodoPago,
+          total: montoFinal,
+          observaciones: observaciones.trim() || undefined,
+          foto_factura_uri: fotoOptimizada,
+        });
+      } else {
+        gastoResultado = guardarGasto({
+          establecimiento: establecimiento.trim(),
+          fecha,
+          hora,
+          ciudad: ciudad.trim() || 'Bogotá',
+          nit: nit.trim(),
+          categoria,
+          metodo_pago: metodoPago,
+          total: montoFinal,
+          observaciones: observaciones.trim() || undefined,
+          foto_factura_uri: fotoOptimizada,
+        });
+      }
+
+      try {
+        confetti({
+          particleCount: 45,
+          spread: 60,
+          origin: { y: 0.8 },
+          colors: ['#10b981', '#14b8a6', '#06b6d4', '#f59e0b'],
+        });
+      } catch {}
+
+      onSaved(gastoResultado);
+    } catch (err: any) {
+      console.error('Error al guardar factura:', err);
+      setErrorBanner(`No se pudo registrar la factura: ${err?.message || 'Error desconocido'}`);
+    } finally {
+      setGuardando(false);
+    }
   };
 
   const seleccionarEstablecimientoFrecuente = (item: typeof ESTABLECIMIENTOS_FRECUENTES[0]) => {
@@ -207,6 +269,13 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
 
         {/* Scrollable Form Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 no-scrollbar">
+          {errorBanner && (
+            <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2 animate-shake">
+              <AlertCircle size={16} className="shrink-0" />
+              <span>{errorBanner}</span>
+            </div>
+          )}
+
           <form id="expense-form" onSubmit={handleSubmit} className="space-y-4">
             {/* Monto Total destacado (Hero input) */}
             <div
@@ -226,20 +295,25 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
               <div className="flex items-center justify-center gap-1.5 text-emerald-600">
                 <span className="text-2xl font-bold">$</span>
                 <input
-                  type="number"
-                  step="any"
+                  type="text"
+                  inputMode="decimal"
                   value={total}
-                  onChange={(e) => setTotal(e.target.value)}
+                  onChange={(e) => {
+                    setTotal(e.target.value);
+                    if (errores.total) {
+                      setErrores((prev) => ({ ...prev, total: '' }));
+                    }
+                  }}
                   placeholder="0"
-                  className={`w-48 text-3xl font-extrabold bg-transparent text-center focus:outline-none font-mono ${
+                  className={`w-56 text-3xl font-extrabold bg-transparent text-center focus:outline-none font-mono ${
                     isDark ? 'text-white placeholder-neutral-600' : 'text-slate-900 placeholder-slate-300'
                   }`}
                   autoFocus={!initialValues?.total}
                 />
               </div>
-              {total && !isNaN(parseFloat(total)) && (
+              {total && parsearMonto(total) > 0 && (
                 <p className={`text-xs mt-1 font-medium ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                  {formatearMoneda(parseFloat(total))}
+                  {formatearMoneda(parsearMonto(total))}
                 </p>
               )}
               {errores.total && (
@@ -559,12 +633,13 @@ export const ManualExpenseForm: React.FC<ManualExpenseFormProps> = ({
             Cancelar
           </button>
           <button
-            type="submit"
-            form="expense-form"
-            className="flex-2 py-3 px-4 rounded-xl font-semibold text-sm bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer"
+            type="button"
+            disabled={guardando}
+            onClick={() => handleSubmit()}
+            className="flex-2 py-3 px-4 rounded-xl font-semibold text-sm bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
           >
             <Check size={18} className="stroke-[2.5]" />
-            <span>{esEdicion ? 'Guardar Cambios' : 'Guardar Factura'}</span>
+            <span>{guardando ? 'Guardando...' : esEdicion ? 'Guardar Cambios' : 'Guardar Factura'}</span>
           </button>
         </div>
 
