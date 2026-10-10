@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Settings, Crown } from 'lucide-react';
+import { Plus, Settings, Crown, User as UserIcon, Sparkles } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { AuraLogo } from './AuraLogo';
 
@@ -63,23 +63,32 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
           </div>
         </div>
 
-        {/* Acciones principales de cabecera: Botón Pro, Botón Gasto y la Tuerca de Ajustes */}
+        {/* Acciones principales de cabecera: Botón Perfil / Admin, Botón Gasto y la Tuerca de Ajustes */}
         <div className="flex items-center gap-2">
-          {/* Botón Corona PRO */}
+          {/* Botón Admin Master / Usuario */}
           {onOpenPremium && (
             <button
               onClick={onOpenPremium}
-              className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1 shadow-sm transition-all active:scale-95 cursor-pointer ${
+              className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer ${
                 esAdmin
                   ? 'bg-gradient-to-r from-amber-500/15 to-amber-600/15 border-amber-500/40 text-amber-500 hover:bg-amber-500/25'
                   : isDark
-                  ? 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-amber-500/50 hover:text-amber-400'
-                  : 'bg-white border-slate-200 text-slate-700 hover:border-amber-400 hover:text-amber-600 shadow-2xs'
+                  ? 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700 hover:text-white'
+                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 shadow-2xs'
               }`}
-              title={esAdmin ? 'Aura Pro: Administrador Master' : 'Aura Pro: Funciones Premium'}
+              title={esAdmin ? 'Aura Pro: Administrador Master' : 'Perfil de Usuario'}
             >
-              <Crown size={14} className={esAdmin ? 'text-amber-500 fill-amber-500' : 'text-amber-500'} />
-              <span className="hidden sm:inline">{esAdmin ? 'Admin Pro' : 'Pro'}</span>
+              {esAdmin ? (
+                <>
+                  <Crown size={14} className="text-amber-500 fill-amber-500" />
+                  <span className="hidden sm:inline">Admin Master</span>
+                </>
+              ) : (
+                <>
+                  <UserIcon size={14} className="text-neutral-400" />
+                  <span className="hidden sm:inline">Usuario</span>
+                </>
+              )}
             </button>
           )}
 

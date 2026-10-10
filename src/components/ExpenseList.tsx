@@ -32,7 +32,8 @@ import {
   eliminarGasto,
   descargarGastosCSV,
   limpiarGastosCorruptos,
-  esUsuarioAdmin
+  esUsuarioAdmin,
+  reiniciarDatosACero
 } from '../services/storageService';
 import { useTheme } from '../context/ThemeContext';
 
@@ -79,8 +80,11 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
     );
   }, [gastos]);
 
-  const mesActualStr = '2026-10';
-  const anioActualStr = '2026';
+  const hoy = new Date();
+  const anioActualStr = String(hoy.getFullYear());
+  const mesActualStr = `${anioActualStr}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+  const nombreMesActual = hoy.toLocaleDateString('es-ES', { month: 'long' });
+  const nombreMesActualCap = nombreMesActual.charAt(0).toUpperCase() + nombreMesActual.slice(1);
 
   const { totalMes, totalAnio, gastosMes, gastosAnio, desgloseAnual, rankingCategorias } = useMemo(() => {
     let tMes = 0;
@@ -252,7 +256,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               ? 'bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-950 border border-neutral-800/90 hover:border-emerald-500/60 shadow-xl hover:shadow-emerald-500/5'
               : 'bg-white border border-slate-200/90 hover:border-emerald-500/60 shadow-sm hover:shadow-md'
           }`}
-          title="Toca para ver, editar o eliminar los gastos registrados en octubre"
+          title={`Toca para ver, editar o eliminar los gastos registrados en ${nombreMesActual}`}
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
           <div className="flex items-center justify-between text-xs font-semibold mb-2">
@@ -261,7 +265,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                 isDark ? 'text-emerald-400' : 'text-emerald-600'
               }`}
             >
-              <CalendarIcon size={14} className="text-emerald-500 shrink-0" /> TOTAL ACUMULADO OCTUBRE 2026
+              <CalendarIcon size={14} className="text-emerald-500 shrink-0" /> TOTAL ACUMULADO {nombreMesActualCap.toUpperCase()} {anioActualStr}
             </span>
             <span
               className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-bold transition-colors ${
@@ -272,7 +276,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                   : 'bg-emerald-50 text-emerald-700 border border-emerald-200 group-hover:bg-emerald-100'
               }`}
             >
-              {filtroOctubreActivo ? 'Viendo Octubre ✓' : 'Toca para abrir →'}
+              {filtroOctubreActivo ? `Viendo ${nombreMesActualCap} ✓` : 'Toca para abrir →'}
             </span>
           </div>
           <div
@@ -311,8 +315,8 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               <Sparkles size={12} className="shrink-0 text-emerald-500" />
               <span>
                 {filtroOctubreActivo
-                  ? 'Mostrando gastos de octubre (Toca para ver todos)'
-                  : 'Toca aquí para ver, editar o eliminar facturas de octubre'}
+                  ? `Mostrando gastos de ${nombreMesActual} (Toca para ver todos)`
+                  : `Toca aquí para ver, editar o eliminar facturas de ${nombreMesActual}`}
               </span>
             </span>
             <span className="text-[10px] font-bold underline shrink-0 ml-1">
@@ -336,7 +340,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                 isDark ? 'text-neutral-400' : 'text-slate-500'
               }`}
             >
-              <TrendingDown size={14} className="text-teal-500" /> Acumulado Año 2026
+              <TrendingDown size={14} className="text-teal-500" /> Acumulado Año {anioActualStr}
             </span>
             <span
               className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
@@ -440,7 +444,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             <div className="space-y-0.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-amber-500">
-                  {esAdmin ? '👑 Función Premium Master' : '⭐ Función Premium'}
+                  {esAdmin ? '👑 Función Premium Master' : '⭐ Conviértete en Admin Master (Pronto)'}
                 </span>
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
@@ -449,13 +453,13 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
                       : 'bg-amber-500/10 text-amber-500 border-amber-500/30'
                   }`}
                 >
-                  {esAdmin ? 'Modo Administrador' : 'Muy pronto'}
+                  {esAdmin ? 'Modo Administrador' : 'Pronto'}
                 </span>
               </div>
               <p className={`text-xs ${isDark ? 'text-neutral-300' : 'text-slate-700'}`}>
                 {esAdmin
                   ? 'Acceso Ilimitado: Auditoría Tributaria DIAN 2026, Libro Fiscal Diario, Deducciones de Renta y Respaldo Total.'
-                  : 'Auditoría Tributaria, Libro Fiscal Oficial y Copias en la Nube. Próximamente disponible.'}
+                  : 'Auditoría Tributaria, Libro Fiscal Oficial y Copias en la Nube. La opción estará habilitada muy pronto.'}
               </p>
             </div>
           </div>
@@ -477,7 +481,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             ) : (
               <>
                 <Sparkles size={13} className="text-amber-500" />
-                <span>Muy pronto</span>
+                <span>Pronto</span>
               </>
             )}
           </button>
@@ -771,7 +775,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300">
               <CalendarIcon size={16} className="shrink-0 text-emerald-500" />
               <div>
-                <span className="font-bold">Mostrando Gastos de Octubre 2026: </span>
+                <span className="font-bold">Mostrando Gastos de {nombreMesActualCap} {anioActualStr}: </span>
                 <span>{gastosFiltrados.length} facturas encontradas. Puedes <strong>editar</strong> o <strong>eliminar</strong> cada comprobante.</span>
               </div>
             </div>
@@ -793,7 +797,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
           <div className="flex items-center gap-2">
             <span className="font-semibold uppercase tracking-wider text-[11px]">
               {filtroOctubreActivo
-                ? 'Facturas de Octubre 2026'
+                ? `Facturas de ${nombreMesActualCap} ${anioActualStr}`
                 : busqueda
                 ? `Resultados para "${busqueda}"`
                 : categoriaFiltro !== 'TODAS'
@@ -839,14 +843,14 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
             </p>
             <p className={`text-xs mt-1 ${isDark ? 'text-neutral-500' : 'text-slate-400'}`}>
               {filtroOctubreActivo
-                ? 'No hay gastos registrados con fecha de octubre 2026.'
-                : 'Prueba cambiando los filtros o registra una nueva factura.'}
+                ? 'No hay gastos registrados en este período.'
+                : 'Aún no tienes gastos registrados. Toca abajo para añadir tu primer comprobante.'}
             </p>
             <button
-              onClick={() => onOpenNewExpense({ fecha: '2026-10-06' })}
+              onClick={() => onOpenNewExpense()}
               className="mt-4 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors cursor-pointer"
             >
-              Registrar Gasto en Octubre
+              + Registrar Primer Gasto
             </button>
           </div>
         ) : (

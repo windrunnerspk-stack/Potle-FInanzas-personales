@@ -640,6 +640,26 @@ export async function deleteGastoFromFirestore(gastoId: string, userIdOverride?:
   }
 }
 
+// Clear all expenses from Firestore for current user to leave database at 0 expenses
+export async function vaciarTodosLosGastosDeFirestore(userIdOverride?: string): Promise<number> {
+  let path = 'gastos';
+  try {
+    const user = userIdOverride ? { uid: userIdOverride } : await ensureAuthUser();
+    path = `users/${user.uid}/gastos`;
+    const gastosCol = collection(db, 'users', user.uid, 'gastos');
+    const snapshot = await getDocs(gastosCol);
+    let eliminados = 0;
+    for (const d of snapshot.docs) {
+      await deleteDoc(d.ref).catch(() => {});
+      eliminados++;
+    }
+    return eliminados;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+    return 0;
+  }
+}
+
 // Fetch all expenses from Firestore for current user
 export async function fetchGastosFromFirestore(userIdOverride?: string): Promise<Gasto[]> {
   let path = 'gastos';

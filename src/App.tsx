@@ -34,7 +34,7 @@ import { AuthWelcomeScreen, AppUserLike } from './components/AuthWelcomeScreen';
 import { CurrencySelectModal } from './components/CurrencySelectModal';
 import { AuraLogo } from './components/AuraLogo';
 import { useTheme } from './context/ThemeContext';
-import { Crown, Lock, Cloud, RefreshCw } from 'lucide-react';
+import { Crown, Lock, Cloud, RefreshCw, Sparkles } from 'lucide-react';
 
 export type AppUser = User | AppUserLike;
 
@@ -271,27 +271,18 @@ export default function App() {
             )}
           </div>
 
-          {/* Accesos rápidos: Pro y Ajustes */}
+          {/* Estado de Cuenta / Rango */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => setMostrarPremiumModal(true)}
-              className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 transition-all cursor-pointer ${
+              className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 transition-all cursor-pointer ${
                 esAdmin
                   ? 'bg-amber-500/15 border border-amber-500/40 text-amber-400 hover:bg-amber-500/25'
-                  : 'bg-neutral-800 border border-neutral-700 text-neutral-400 hover:border-amber-500/40 hover:text-amber-400'
+                  : 'bg-neutral-800/90 border border-neutral-700/80 text-amber-400/90 hover:border-amber-500/40 hover:text-amber-300'
               }`}
             >
-              {esAdmin ? <Crown size={12} className="text-amber-500" /> : <Lock size={11} className="text-amber-500" />}
-              <span>{esAdmin ? 'Admin Master' : 'Aura Pro'}</span>
-            </button>
-
-            <button
-              onClick={() => setMostrarSettings(true)}
-              className={`text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer ${
-                isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'
-              }`}
-            >
-              <span>Ajustes</span>
+              {esAdmin ? <Crown size={12} className="text-amber-500 fill-amber-500" /> : <Sparkles size={11} className="text-amber-400" />}
+              <span>{esAdmin ? 'Admin Master' : 'Conviértete en Admin Master (Pronto)'}</span>
             </button>
           </div>
         </div>

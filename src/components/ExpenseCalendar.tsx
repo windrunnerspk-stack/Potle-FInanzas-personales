@@ -24,8 +24,9 @@ interface ExpenseCalendarProps {
 
 export const ExpenseCalendar: React.FC<ExpenseCalendarProps> = ({ gastos }) => {
   const { isDark } = useTheme();
-  const [anio, setAnio] = useState(2026);
-  const [mes, setMes] = useState(9); // 9 = Octubre (0-indexed)
+  const fechaActual = new Date();
+  const [anio, setAnio] = useState(fechaActual.getFullYear());
+  const [mes, setMes] = useState(fechaActual.getMonth()); // 0-indexed
   const [diaSeleccionado, setDiaSeleccionado] = useState<string | null>(null);
 
   const nombresMeses = [

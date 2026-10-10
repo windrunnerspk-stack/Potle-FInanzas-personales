@@ -13,7 +13,8 @@ import {
   deleteGastoFromFirestore,
   fetchGastosFromFirestore,
   syncUserProfileToFirestore,
-  sincronizarTodoConGoogle
+  sincronizarTodoConGoogle,
+  vaciarTodosLosGastosDeFirestore
 } from './firebase';
 
 const STORAGE_KEY_GASTOS = 'aura_finances_gastos_v1';
@@ -41,159 +42,8 @@ const INITIAL_CONFIG: UsuarioConfig = {
   ultima_sincronizacion: new Date().toISOString(),
 };
 
-// Semilla inicial realista de facturas con las 23 categorías oficiales
-const SEED_GASTOS: Gasto[] = [
-  {
-    id: 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
-    establecimiento: 'Estación Terpel Calle 100',
-    fecha: '2026-10-06',
-    hora: '08:45',
-    ciudad: 'Bogotá',
-    nit: '860.005.224-6',
-    categoria: 'Gasolina',
-    metodo_pago: 'Tarjeta Crédito',
-    total: 145000,
-    observaciones: 'Tanque lleno Corriente para viaje',
-    sincronizado: true,
-    creado_en: '2026-10-06T08:45:00',
-    actualizado_en: '2026-10-06T08:45:00',
-  },
-  {
-    id: 'b1a2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
-    establecimiento: 'Éxito Calle 80',
-    fecha: '2026-10-06',
-    hora: '14:20',
-    ciudad: 'Bogotá',
-    nit: '890.900.608-9',
-    categoria: 'Mercado',
-    metodo_pago: 'Tarjeta Débito',
-    total: 320500,
-    observaciones: 'Mercado de la quincena víveres y aseo',
-    sincronizado: true,
-    creado_en: '2026-10-06T14:20:00',
-    actualizado_en: '2026-10-06T14:20:00',
-  },
-  {
-    id: 'b1a2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c99',
-    establecimiento: 'Oxxo Parque 93',
-    fecha: '2026-10-06',
-    hora: '17:10',
-    ciudad: 'Bogotá',
-    nit: '900.254.123-1',
-    categoria: 'Snacks',
-    metodo_pago: 'Efectivo',
-    total: 18500,
-    observaciones: 'Café americano y galletas de avena',
-    sincronizado: true,
-    creado_en: '2026-10-06T17:10:00',
-    actualizado_en: '2026-10-06T17:10:00',
-  },
-  {
-    id: 'c2b3a4d5-e6f7-8a9b-0c1d-2e3f4a5b6c7d',
-    establecimiento: 'Crepes & Waffles Zona T',
-    fecha: '2026-10-05',
-    hora: '19:30',
-    ciudad: 'Bogotá',
-    nit: '860.519.894-3',
-    categoria: 'Restaurantes',
-    metodo_pago: 'Tarjeta Débito',
-    total: 89400,
-    observaciones: 'Cena de celebración familiar',
-    sincronizado: true,
-    creado_en: '2026-10-05T19:30:00',
-    actualizado_en: '2026-10-05T19:30:00',
-  },
-  {
-    id: 'd3c4b5a6-f7e8-9b0a-1c2d-3e4f5a6b7c8d',
-    establecimiento: 'Droguería Cruz Verde 93',
-    fecha: '2026-10-04',
-    hora: '11:15',
-    ciudad: 'Bogotá',
-    nit: '800.149.695-1',
-    categoria: 'Salud',
-    metodo_pago: 'Transferencia',
-    total: 64200,
-    observaciones: 'Medicamentos recetados y vitaminas',
-    sincronizado: true,
-    creado_en: '2026-10-04T11:15:00',
-    actualizado_en: '2026-10-04T11:15:00',
-  },
-  {
-    id: 'e4d5c6b7-a8f9-0b1a-2c3d-4e5f6a7b8c9d',
-    establecimiento: 'Inmobiliaria Habitat S.A.S.',
-    fecha: '2026-10-01',
-    hora: '09:00',
-    ciudad: 'Bogotá',
-    nit: '900.845.120-7',
-    categoria: 'Vivienda',
-    metodo_pago: 'Transferencia',
-    total: 2150000,
-    observaciones: 'Canon de arrendamiento + administración mensual',
-    sincronizado: true,
-    creado_en: '2026-10-01T09:00:00',
-    actualizado_en: '2026-10-01T09:00:00',
-  },
-  {
-    id: 'f5e6d7c8-b9a0-1c2d-3e4f-5a6b7c8d9e0f',
-    establecimiento: 'Netflix Mensualidad',
-    fecha: '2026-09-28',
-    hora: '03:00',
-    ciudad: 'Bogotá',
-    nit: '901.388.940-2',
-    categoria: 'Suscripciones',
-    metodo_pago: 'Tarjeta Crédito',
-    total: 44900,
-    observaciones: 'Plan Premium 4 Pantallas',
-    sincronizado: true,
-    creado_en: '2026-09-28T03:00:00',
-    actualizado_en: '2026-09-28T03:00:00',
-  },
-  {
-    id: 'a6b7c8d9-c0d1-2e3f-4a5b-6c7d8e9f0a1b',
-    establecimiento: 'Universidad de los Andes',
-    fecha: '2026-09-15',
-    hora: '10:30',
-    ciudad: 'Bogotá',
-    nit: '860.007.386-1',
-    categoria: 'Educación',
-    metodo_pago: 'Transferencia',
-    total: 1200000,
-    observaciones: 'Cuota de especialización en Arquitectura de Software',
-    sincronizado: true,
-    creado_en: '2026-09-15T10:30:00',
-    actualizado_en: '2026-09-15T10:30:00',
-  },
-  {
-    id: 'b7c8d9e0-d1e2-3f4a-5b6c-7d8e9f0a1b2c',
-    establecimiento: 'Estación Terpel Autopista Norte',
-    fecha: '2026-09-22',
-    hora: '18:10',
-    ciudad: 'Bogotá',
-    nit: '860.005.224-6',
-    categoria: 'Gasolina',
-    metodo_pago: 'Efectivo',
-    total: 110000,
-    observaciones: 'Combustible fin de semana',
-    sincronizado: true,
-    creado_en: '2026-09-22T18:10:00',
-    actualizado_en: '2026-09-22T18:10:00',
-  },
-  {
-    id: 'c8d9e0f1-e2f3-4a5b-6c7d-8e9f0a1b2c3d',
-    establecimiento: 'Apple Store Unicentro',
-    fecha: '2026-08-10',
-    hora: '16:00',
-    ciudad: 'Bogotá',
-    nit: '830.098.712-3',
-    categoria: 'Tecnología',
-    metodo_pago: 'Tarjeta Crédito',
-    total: 980000,
-    observaciones: 'Accesorios y cargador MagSafe',
-    sincronizado: true,
-    creado_en: '2026-08-10T16:00:00',
-    actualizado_en: '2026-08-10T16:00:00',
-  }
-];
+// Inicialización limpia: 0 gastos precargados para que la app esté completamente lista y vacía para el usuario final
+const SEED_GASTOS: Gasto[] = [];
 
 export function obtenerConfiguracion(): UsuarioConfig {
   try {
@@ -498,6 +348,8 @@ export function reiniciarDatosACero(): void {
   guardarConfiguracion({
     ultima_sincronizacion: new Date().toISOString(),
   });
+  // Purgar también en Firestore para que la nube quede en 0 comprobantes
+  vaciarTodosLosGastosDeFirestore().catch((err) => console.warn('Error al vaciar gastos en Firestore:', err));
 }
 
 export function encolarSync(gastoId: string, accion: 'CREATE' | 'UPDATE' | 'DELETE', payload: any): void {

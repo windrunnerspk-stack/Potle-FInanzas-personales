@@ -15,8 +15,9 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ gastos }) => {
   const [periodo, setPeriodo] = useState<'mes' | 'anio'>('mes');
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string | null>(null);
 
-  const mesActual = '2026-10';
-  const anioActual = '2026';
+  const hoy = new Date();
+  const anioActual = String(hoy.getFullYear());
+  const mesActual = `${anioActual}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
 
   // Filtrar según período
   const gastosPeriodo = useMemo(() => {

@@ -62,11 +62,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSincronizarAhora,
 }) => {
   const { isDark, toggleTheme } = useTheme();
-  const [tab, setTab] = useState<'general' | 'datos' | 'desarrollo'>('general');
+  const [tab, setTab] = useState<'general' | 'datos'>('general');
   const [moneda, setMoneda] = useState(config.moneda || 'USD');
   const [email, setEmail] = useState(currentUser?.email || config.email || '');
   const [mostrarConfirmReset, setMostrarConfirmReset] = useState(false);
-  const [copiadoSQL, setCopiadoSQL] = useState(false);
   const [guardadoExito, setGuardadoExito] = useState(false);
   const [sincronizandoNube, setSincronizandoNube] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
@@ -96,12 +95,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setMostrarConfirmReset(false);
     onDataReset();
     onClose();
-  };
-
-  const handleCopiarSQL = () => {
-    navigator.clipboard.writeText(SQLITE_SCHEMA_SQL.trim());
-    setCopiadoSQL(true);
-    setTimeout(() => setCopiadoSQL(false), 2000);
   };
 
   return (
@@ -172,17 +165,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <Database size={14} />
             <span>Datos & Reset</span>
-          </button>
-          <button
-            onClick={() => setTab('desarrollo')}
-            className={`py-3 px-3 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
-              tab === 'desarrollo'
-                ? 'border-emerald-500 text-emerald-500'
-                : 'border-transparent text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            <Code2 size={14} />
-            <span>Técnico & SQL</span>
           </button>
         </div>
 
@@ -408,7 +390,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                   <div>
                     <div className="font-bold flex items-center gap-1.5">
-                      <span>{esUsuarioAdmin(email) ? '👑 Administrador Master Pro' : '⭐ Función Premium (Muy pronto)'}</span>
+                      <span>{esUsuarioAdmin(email) ? '👑 Administrador Master Pro' : '⭐ Conviértete en Admin Master (Pronto)'}</span>
                     </div>
                     <div className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
                       {esUsuarioAdmin(email)
@@ -424,7 +406,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={onOpenPremium}
                     className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-amber-400 font-bold text-xs border border-amber-500/30 shrink-0 cursor-pointer transition-colors"
                   >
-                    {esUsuarioAdmin(email) ? 'Abrir Pro' : 'Muy pronto'}
+                    {esUsuarioAdmin(email) ? 'Abrir Pro' : 'Pronto'}
                   </button>
                 )}
               </div>
@@ -542,69 +524,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span>Abrir panel de Google Sheets</span>
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {tab === 'desarrollo' && (
-            <div className="space-y-4">
-              <div
-                className={`p-3.5 rounded-2xl border text-xs leading-relaxed ${
-                  isDark ? 'bg-neutral-950/40 border-neutral-800 text-neutral-300' : 'bg-slate-50 border-slate-200 text-slate-600'
-                }`}
-              >
-                Estas herramientas técnicas están guardadas dentro de este menú para mantener la pantalla principal limpia y sin botones de desarrollador.
-              </div>
-
-              {/* Esquema SQL */}
-              <div
-                className={`p-4 rounded-2xl border ${
-                  isDark ? 'bg-neutral-950/50 border-neutral-800' : 'bg-slate-50 border-slate-200'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Database size={16} className="text-cyan-400" />
-                    <span className="text-xs font-bold">Esquema SQL de la Base de Datos</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCopiarSQL}
-                    className="px-2.5 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
-                  >
-                    {copiadoSQL ? (
-                      <>
-                        <Check size={12} className="text-emerald-400" />
-                        <span className="text-emerald-400">Copiado</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={12} />
-                        <span>Copiar SQL</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <pre className={`p-3 rounded-xl text-[10px] font-mono overflow-x-auto max-h-40 border ${
-                  isDark ? 'bg-neutral-950 text-neutral-300 border-neutral-800' : 'bg-slate-900 text-slate-100 border-slate-800'
-                }`}>
-                  {SQLITE_SCHEMA_SQL.trim().slice(0, 500)}...
-                </pre>
-              </div>
-
-              {/* Android APK info */}
-              <div
-                className={`p-4 rounded-2xl border ${
-                  isDark ? 'bg-neutral-950/50 border-neutral-800' : 'bg-slate-50 border-slate-200'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Smartphone size={16} className="text-emerald-400" />
-                  <span className="text-xs font-bold">Empaquetado Android (Capacitor)</span>
-                </div>
-                <p className={`text-xs leading-relaxed ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                  La app compila con Capacitor 8 a través de GitHub Actions generando directamente el archivo <strong>AuraFinanzas-Debug.apk</strong> listo para instalar en cualquier teléfono.
-                </p>
               </div>
             </div>
           )}
