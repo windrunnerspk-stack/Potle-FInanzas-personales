@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "743681601754",
+    "project_id": "gen-lang-client-0811256759",
+    "storage_bucket": "gen-lang-client-0811256759.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:743681601754:android:511fba89fd5a30408c35e3",
+        "android_client_info": {
+          "package_name": "com.aurafinanzas.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "743681601754-89jl01uqfg93mi8s0hok6sj7rkcb2ngo.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAau7MHTuntHEJRQSP_7N2Sc2KrPqlvmSw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "743681601754-89jl01uqfg93mi8s0hok6sj7rkcb2ngo.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
