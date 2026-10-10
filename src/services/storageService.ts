@@ -34,13 +34,44 @@ export function esUsuarioAdmin(email?: string): boolean {
 
 const INITIAL_CONFIG: UsuarioConfig = {
   email: '',
-  modo: 'sincronizado',
+  modo: 'local',
   moneda: 'COP',
   onboarding_completado: true,
   notificaciones_email: false,
   google_sheets_id: '',
   ultima_sincronizacion: new Date().toISOString(),
 };
+
+const STORAGE_KEY_LAST_BACKUP_REMINDER = 'aura_finances_last_backup_prompt_v1';
+
+/**
+ * Verifica si han pasado 15 o más días desde la última recomendación de exportar/respaldar
+ */
+export function debeMostrarRecordatorio15Dias(): boolean {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_LAST_BACKUP_REMINDER);
+    if (!raw) {
+      // Si es primera vez, registrar la fecha actual para empezar a contar los 15 días
+      localStorage.setItem(STORAGE_KEY_LAST_BACKUP_REMINDER, new Date().toISOString());
+      return false;
+    }
+    const fechaUltima = new Date(raw).getTime();
+    const ahora = Date.now();
+    const quinceDiasMs = 15 * 24 * 60 * 60 * 1000;
+    return (ahora - fechaUltima) >= quinceDiasMs;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Marca la fecha actual como el último recordatorio o exportación realizada
+ */
+export function posponerRecordatorio15Dias(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_LAST_BACKUP_REMINDER, new Date().toISOString());
+  } catch {}
+}
 
 // Inicialización limpia: 0 gastos precargados para que la app esté completamente lista y vacía para el usuario final
 const SEED_GASTOS: Gasto[] = [];
@@ -593,8 +624,107 @@ export function exportarGastosParaGoogleSheetsTSV(gastos: Gasto[]): string {
   return [encabezados.join('\t'), ...filas].join('\r\n');
 }
 
+export const STORAGE_KEY_ULTIMA_EXPORTACION = 'aura_ultima_exportacion_ts';
+export const STORAGE_KEY_ULTIMO_RECORDATORIO = 'aura_ultimo_recordatorio_ts';
+
+export interface EstadoRecordatorioExportacion {
+  debeMostrar: boolean;
+  diasTranscurridos: number;
+  ultimaExportacionFecha: string | null;
+  proximoRecordatorioEnDias: number;
+}
+
+/**
+ * Consulta el estado del recordatorio de 15 días para exportar la copia de seguridad.
+ * Si han pasado 15 días o más desde la última exportación o último aviso, debeMostrar = true.
+ */
+export function obtenerEstadoRecordatorioExportacion(): EstadoRecordatorioExportacion {
+  try {
+    const ahora = Date.now();
+    const quiceDiasMs = 15 * 24 * 60 * 60 * 1000;
+
+    const rawUltimaExportacion = localStorage.getItem(STORAGE_KEY_ULTIMA_EXPORTACION);
+    const rawUltimoRecordatorio = localStorage.getItem(STORAGE_KEY_ULTIMO_RECORDATORIO);
+
+    const tsUltimaExportacion = rawUltimaExportacion ? parseInt(rawUltimaExportacion, 10) : null;
+    const tsUltimoRecordatorio = rawUltimoRecordatorio ? parseInt(rawUltimoRecordatorio, 10) : null;
+
+    let diasTranscurridos = 0;
+    let ultimaExportacionFecha: string | null = null;
+
+    if (tsUltimaExportacion && !isNaN(tsUltimaExportacion)) {
+      diasTranscurridos = Math.floor((ahora - tsUltimaExportacion) / (24 * 60 * 60 * 1000));
+      ultimaExportacionFecha = new Date(tsUltimaExportacion).toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+    }
+
+    // Si ya se pospuso o avisó recientemente (hace menos de 15 días), no molestar
+    if (tsUltimoRecordatorio && !isNaN(tsUltimoRecordatorio)) {
+      const tiempoDesdeRecordatorio = ahora - tsUltimoRecordatorio;
+      if (tiempoDesdeRecordatorio < quiceDiasMs) {
+        const diasRestantes = Math.ceil((quiceDiasMs - tiempoDesdeRecordatorio) / (24 * 60 * 60 * 1000));
+        return {
+          debeMostrar: false,
+          diasTranscurridos,
+          ultimaExportacionFecha,
+          proximoRecordatorioEnDias: diasRestantes,
+        };
+      }
+    }
+
+    // Si nunca ha exportado o pasaron 15+ días desde la última exportación
+    const pasoTiempoDesdeExport = !tsUltimaExportacion || (ahora - tsUltimaExportacion >= quiceDiasMs);
+    const pasoTiempoDesdeAviso = !tsUltimoRecordatorio || (ahora - tsUltimoRecordatorio >= quiceDiasMs);
+
+    const debeMostrar = pasoTiempoDesdeExport && pasoTiempoDesdeAviso;
+
+    return {
+      debeMostrar,
+      diasTranscurridos,
+      ultimaExportacionFecha,
+      proximoRecordatorioEnDias: debeMostrar ? 0 : 15,
+    };
+  } catch {
+    return {
+      debeMostrar: true,
+      diasTranscurridos: 15,
+      ultimaExportacionFecha: null,
+      proximoRecordatorioEnDias: 0,
+    };
+  }
+}
+
+/**
+ * Marca que el usuario realizó la exportación hoy, reiniciando el ciclo de 15 días.
+ */
+export function marcarExportacionRealizada(): void {
+  try {
+    const ahoraStr = Date.now().toString();
+    localStorage.setItem(STORAGE_KEY_ULTIMA_EXPORTACION, ahoraStr);
+    localStorage.setItem(STORAGE_KEY_ULTIMO_RECORDATORIO, ahoraStr);
+  } catch (e) {
+    console.warn('Error al guardar fecha de exportación:', e);
+  }
+}
+
+/**
+ * Pospone el recordatorio por 15 días (o la cantidad de días indicada).
+ */
+export function posponerRecordatorioExportacion(dias: number = 15): void {
+  try {
+    const ahoraStr = Date.now().toString();
+    localStorage.setItem(STORAGE_KEY_ULTIMO_RECORDATORIO, ahoraStr);
+  } catch (e) {
+    console.warn('Error al posponer recordatorio:', e);
+  }
+}
+
 /**
  * Dispara la descarga local en el navegador de un archivo CSV con codificación UTF-8 BOM
+ * y estructura oficial de 18 columnas para Google Sheets / Excel.
  */
 export function descargarGastosCSV(gastos: Gasto[], nombreArchivo: string = 'Aura_Finanzas_Gastos'): void {
   const csvContent = exportarGastosACSV(gastos);
@@ -608,6 +738,7 @@ export function descargarGastosCSV(gastos: Gasto[], nombreArchivo: string = 'Aur
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  marcarExportacionRealizada();
 }
 
 /**

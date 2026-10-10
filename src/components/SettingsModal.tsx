@@ -22,7 +22,8 @@ import {
   LogOut,
   RefreshCw,
   UserCheck,
-  CheckCircle2
+  CheckCircle2,
+  Download
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { UsuarioConfig } from '../types/finance';
@@ -41,6 +42,7 @@ interface SettingsModalProps {
   onDataReset: () => void;
   onOpenSyncSheets: () => void;
   onOpenPremium?: () => void;
+  onOpenExportTutorial?: () => void;
   currentUser?: { uid: string; email?: string | null; displayName?: string | null } | null;
   esInvitado?: boolean;
   onConectarGoogle?: () => void;
@@ -55,6 +57,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onDataReset,
   onOpenSyncSheets,
   onOpenPremium,
+  onOpenExportTutorial,
   currentUser,
   esInvitado,
   onConectarGoogle,
@@ -511,7 +514,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -523,6 +526,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <FileSpreadsheet size={13} />
                     <span>Abrir panel de Google Sheets</span>
                   </button>
+
+                  {onOpenExportTutorial && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenExportTutorial();
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-500 text-neutral-950 font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer hover:bg-emerald-400 shadow-sm"
+                    >
+                      <Download size={13} />
+                      <span>Exportar y Ver Tutorial (18 Cols)</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

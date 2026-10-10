@@ -17,7 +17,8 @@ import {
   ChevronRight,
   Database,
   ExternalLink,
-  FileDown
+  FileDown,
+  HelpCircle
 } from 'lucide-react';
 import { Gasto, UsuarioConfig, LISTA_CATEGORIAS_DEFAULT } from '../types/finance';
 import {
@@ -37,6 +38,7 @@ import {
 import { loginWithGoogle } from '../services/firebase';
 import { CategoryIcon } from './CategoryIcon';
 import { useTheme } from '../context/ThemeContext';
+import { ExportTutorialModal } from './ExportTutorialModal';
 
 interface SyncSheetModalProps {
   gastos: Gasto[];
@@ -73,6 +75,7 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
   const [errorUrl, setErrorUrl] = useState('');
   const [modoGuardado, setModoGuardado] = useState<'anexar' | 'reemplazar'>('anexar');
   const [notificacionCopiado, setNotificacionCopiado] = useState(false);
+  const [mostrarTutorial, setMostrarTutorial] = useState(false);
 
   // Parseo en tiempo real del texto ingresado
   const resultadoParseo = useMemo(() => {
@@ -891,6 +894,17 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                     <FileDown size={13} className="text-teal-500" />
                     <span>Guardar CSV</span>
                   </button>
+
+                  {/* Tutorial de 18 Columnas y Respaldo Oficial */}
+                  <button
+                    type="button"
+                    onClick={() => setMostrarTutorial(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-neutral-950 hover:bg-emerald-400 shadow-sm transition-all cursor-pointer"
+                    title="Abre el tutorial guiado de exportación y resguardo de datos con 18 columnas"
+                  >
+                    <HelpCircle size={13} />
+                    <span>Tutorial de Respaldo (18 Cols)</span>
+                  </button>
                 </div>
 
                 <button
@@ -1078,6 +1092,15 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
           )}
         </div>
       </motion.div>
+
+      {mostrarTutorial && (
+        <ExportTutorialModal
+          isOpen={mostrarTutorial}
+          onClose={() => setMostrarTutorial(false)}
+          gastos={gastos}
+          config={config}
+        />
+      )}
     </div>
   );
 };

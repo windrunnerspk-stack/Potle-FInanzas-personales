@@ -23,7 +23,8 @@ import {
   Crown,
   Lock,
   History,
-  ShieldCheck
+  ShieldCheck,
+  Download
 } from 'lucide-react';
 import { Gasto, CategoriaGasto, LISTA_CATEGORIAS, UsuarioConfig } from '../types/finance';
 import { CategoryIcon } from './CategoryIcon';
@@ -33,7 +34,9 @@ import {
   descargarGastosCSV,
   limpiarGastosCorruptos,
   esUsuarioAdmin,
-  reiniciarDatosACero
+  reiniciarDatosACero,
+  obtenerEstadoRecordatorioExportacion,
+  posponerRecordatorioExportacion
 } from '../services/storageService';
 import { useTheme } from '../context/ThemeContext';
 
@@ -46,6 +49,7 @@ interface ExpenseListProps {
   onSelectGasto?: (gasto: Gasto) => void;
   onOpenImportSheet?: () => void;
   onOpenPremiumModal?: () => void;
+  onOpenExportTutorial?: () => void;
 }
 
 export const ExpenseList: React.FC<ExpenseListProps> = ({
@@ -56,6 +60,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
   onRefresh,
   onOpenImportSheet,
   onOpenPremiumModal,
+  onOpenExportTutorial,
 }) => {
   const { isDark } = useTheme();
   const [busqueda, setBusqueda] = useState('');
@@ -66,6 +71,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
   const [detalleGasto, setDetalleGasto] = useState<Gasto | null>(null);
   const [mensajeDepuracion, setMensajeDepuracion] = useState('');
   const [toastMensaje, setToastMensaje] = useState<string | null>(null);
+  const [recordatorioState, setRecordatorioState] = useState(() => obtenerEstadoRecordatorioExportacion());
   const listadoRef = React.useRef<HTMLDivElement>(null);
 
   // Perfil de Administrador Master (latouchettdiego@gmail.com)
@@ -234,6 +240,77 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
 
   return (
     <div className="space-y-4 pb-20">
+      {/* Mensaje Recordatorio cada 15 días: Recomendación de Exportar Respaldo a Google Sheets */}
+      {recordatorioState.debeMostrar && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`p-4 rounded-3xl border transition-all ${
+            isDark
+              ? 'bg-gradient-to-r from-emerald-950/40 via-neutral-900 to-neutral-900/90 border-emerald-500/40 shadow-lg shadow-emerald-950/30'
+              : 'bg-gradient-to-r from-emerald-50/90 via-teal-50/50 to-white border-emerald-300 shadow-sm'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0 mt-0.5 border border-emerald-500/30">
+                <ShieldCheck size={22} />
+              </div>
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    Copia de Seguridad Recomendada (Cada 15 días)
+                  </h4>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-500 font-bold border border-emerald-500/30">
+                    Memoria Local
+                  </span>
+                </div>
+                <p className={`text-xs leading-relaxed ${isDark ? 'text-neutral-300' : 'text-slate-600'}`}>
+                  Tus datos se guardan de forma privada en la memoria local de tu teléfono. Te recomendamos descargar tu archivo oficial de 18 columnas y sobrescribir tu hoja de Google Sheets para tener un respaldo seguro si formateas o cambias de equipo.
+                </p>
+                <div className="flex flex-wrap items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={onOpenExportTutorial}
+                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 text-neutral-950 font-bold text-xs flex items-center gap-1.5 hover:brightness-110 active:scale-95 transition-all cursor-pointer shadow-md shadow-emerald-500/20"
+                  >
+                    <Download size={13} className="stroke-[2.5]" />
+                    <span>Exportar y Ver Tutorial (18 Cols)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      posponerRecordatorioExportacion(15);
+                      setRecordatorioState(obtenerEstadoRecordatorioExportacion());
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                      isDark
+                        ? 'border-neutral-800 bg-neutral-900 text-neutral-300 hover:text-white hover:bg-neutral-800'
+                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 shadow-2xs'
+                    }`}
+                  >
+                    Recordar en 15 días
+                  </button>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                posponerRecordatorioExportacion(15);
+                setRecordatorioState(obtenerEstadoRecordatorioExportacion());
+              }}
+              className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
+                isDark ? 'text-neutral-500 hover:text-white' : 'text-slate-400 hover:text-slate-700'
+              }`}
+              title="Posponer aviso por 15 días"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       {/* 1. Tarjetas de Resumen Mensual & Anual */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Resumen Mensual / Total Acumulado Octubre (Interactivo y Clickeable, Estilo Limpio Original) */}
@@ -604,16 +681,23 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
           </div>
 
           <button
-            onClick={() => descargarGastosCSV(gastos)}
-            className={`px-3 py-3 rounded-2xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap active:scale-95 shrink-0 ${
+            onClick={() => {
+              if (onOpenExportTutorial) {
+                onOpenExportTutorial();
+              } else {
+                descargarGastosCSV(gastos);
+              }
+            }}
+            className={`px-3.5 py-3 rounded-2xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap active:scale-95 shrink-0 ${
               isDark
-                ? 'bg-neutral-900 border-neutral-700 text-neutral-300 hover:bg-neutral-800'
-                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-xs'
+                ? 'bg-neutral-900 border-neutral-700 text-neutral-200 hover:bg-neutral-800 hover:border-emerald-500/50'
+                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 shadow-xs hover:border-emerald-500/50'
             }`}
-            title="Exportar gastos actuales como archivo CSV para guardar localmente"
+            title="Exportar archivo oficial de 18 columnas para Google Sheets & Excel con tutorial paso a paso"
           >
-            <FileDown size={16} className="text-teal-500" />
-            <span className="hidden sm:inline">Exportar CSV</span>
+            <Download size={16} className="text-emerald-500" />
+            <span className="hidden sm:inline">Exportar (18 Cols)</span>
+            <span className="sm:hidden text-[11px]">Exportar</span>
           </button>
 
           {onOpenImportSheet && (

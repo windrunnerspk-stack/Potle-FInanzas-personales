@@ -31,10 +31,11 @@ import { SyncSheetModal } from './components/SyncSheetModal';
 import { SettingsModal } from './components/SettingsModal';
 import { PremiumProModal } from './components/PremiumProModal';
 import { AuthWelcomeScreen, AppUserLike } from './components/AuthWelcomeScreen';
+import { ExportTutorialModal } from './components/ExportTutorialModal';
 import { CurrencySelectModal } from './components/CurrencySelectModal';
 import { AuraLogo } from './components/AuraLogo';
 import { useTheme } from './context/ThemeContext';
-import { Crown, Lock, Cloud, RefreshCw, Sparkles } from 'lucide-react';
+import { Crown, Lock, Cloud, RefreshCw, Sparkles, Smartphone } from 'lucide-react';
 
 export type AppUser = User | AppUserLike;
 
@@ -43,6 +44,7 @@ export default function App() {
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [config, setConfig] = useState<UsuarioConfig>(obtenerConfiguracion());
   const [activeTab, setActiveTab] = useState<'gastos' | 'calendar' | 'analytics' | 'sync' | 'widgets'>('gastos');
+  const [mostrarExportTutorial, setMostrarExportTutorial] = useState(false);
 
   // Estado de Autenticación Real de Google y Modo Invitado
   const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
@@ -169,9 +171,8 @@ export default function App() {
     );
   }
 
-  // 2. NUEVA PANTALLA DE INICIO OBLIGATORIA (Primera pantalla antes de cualquier otra cosa)
-  const sesionActiva = (!!currentUser || esInvitado) && !mostrarAuthManual;
-  if (!sesionActiva) {
+  // Si el usuario abrió manualmente conectar con Google desde Ajustes
+  if (mostrarAuthManual) {
     return (
       <AuthWelcomeScreen
         onGoogleSuccess={async (user) => {
@@ -196,13 +197,7 @@ export default function App() {
           recargarDatos();
         }}
         onGuestSelected={() => {
-          setEsInvitado(true);
           setMostrarAuthManual(false);
-          try {
-            localStorage.setItem('aura_modo_invitado', 'true');
-          } catch {}
-          const conf = guardarConfiguracion({ modo: 'local' });
-          setConfig(conf);
         }}
       />
     );
@@ -246,29 +241,16 @@ export default function App() {
               </span>
             </div>
 
-            {/* Estado de sincronización en tiempo real */}
-            {currentUser ? (
-              <div
-                className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold"
-                title={`Sincronizado en la nube con ${currentUser.email}`}
-              >
-                <Cloud size={12} className={sincronizandoGoogle ? 'animate-pulse text-emerald-400' : 'shrink-0'} />
-                <span className="truncate max-w-[130px] sm:max-w-[190px]">
-                  {currentUser.email?.split('@')[0]}
-                </span>
-                <span className="text-[10px] opacity-75 font-mono">✓</span>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setMostrarAuthManual(true)}
-                className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 hover:bg-amber-500/20 text-[11px] font-bold transition-all cursor-pointer"
-                title="Tus datos están en modo local. Toca para conectar con Google y respaldar en la nube"
-              >
-                <Cloud size={12} />
-                <span>Modo Local • Conectar Google</span>
-              </button>
-            )}
+            {/* Estado de almacenamiento local en el teléfono */}
+            <button
+              type="button"
+              onClick={() => setMostrarExportTutorial(true)}
+              className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold hover:bg-emerald-500/20 transition-all cursor-pointer"
+              title="Tus datos se guardan de forma privada en el almacenamiento local de este teléfono. Toca para ver el tutorial de exportación."
+            >
+              <Smartphone size={12} className="text-emerald-500" />
+              <span>Guardado en Teléfono (Local)</span>
+            </button>
           </div>
 
           {/* Estado de Cuenta / Rango */}
@@ -297,6 +279,7 @@ export default function App() {
             onRefresh={recargarDatos}
             onOpenImportSheet={() => handleOpenImportSheet('importar')}
             onOpenPremiumModal={() => setMostrarPremiumModal(true)}
+            onOpenExportTutorial={() => setMostrarExportTutorial(true)}
           />
         )}
 
@@ -359,6 +342,7 @@ export default function App() {
             onDataReset={recargarDatos}
             onOpenSyncSheets={() => handleOpenImportSheet('sheet')}
             onOpenPremium={() => setMostrarPremiumModal(true)}
+            onOpenExportTutorial={() => setMostrarExportTutorial(true)}
             onConectarGoogle={() => {
               setMostrarSettings(false);
               setMostrarAuthManual(true);
@@ -417,6 +401,15 @@ export default function App() {
             pestañaInicial={pestañaSyncModal}
             onClose={() => setMostrarSyncModal(false)}
             onSynced={() => recargarDatos()}
+          />
+        )}
+
+        {mostrarExportTutorial && (
+          <ExportTutorialModal
+            isOpen={mostrarExportTutorial}
+            onClose={() => setMostrarExportTutorial(false)}
+            gastos={gastos}
+            config={config}
           />
         )}
       </AnimatePresence>
