@@ -29,7 +29,7 @@ export const firebaseConfig = {
   appId: configJson.appId,
   apiKey: configJson.apiKey,
   authDomain: configJson.authDomain,
-  firestoreDatabaseId: configJson.firestoreDatabaseId,
+  firestoreDatabaseId: (configJson as Record<string, any>).firestoreDatabaseId || '',
   storageBucket: configJson.storageBucket,
   messagingSenderId: configJson.messagingSenderId,
 };
@@ -246,6 +246,39 @@ export async function loginWithGoogleCredential(idToken: string): Promise<Google
   }
 }
 
+// In-memory token cache for Google Workspace APIs (Google Sheets)
+let cachedAccessToken: string | null = null;
+
+export function getGoogleAccessToken(): string | null {
+  return cachedAccessToken;
+}
+
+export function setGoogleAccessToken(token: string | null): void {
+  cachedAccessToken = token;
+}
+
+// Helper para solicitar permisos de Google Sheets específicamente
+export async function solicitarPermisosGoogleSheets(): Promise<{ success: boolean; accessToken?: string; error?: string }> {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/spreadsheets');
+    provider.setCustomParameters({ prompt: 'consent' });
+
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      cachedAccessToken = credential.accessToken;
+      if (result.user.email) {
+        localStorage.setItem(STORAGE_KEY_GOOGLE_EMAIL, result.user.email);
+      }
+      return { success: true, accessToken: credential.accessToken };
+    }
+    return { success: false, error: 'No se obtuvo el token de acceso de Google' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Error al autorizar Google Sheets' };
+  }
+}
+
 // Safe Google Sign-In helper con diagnóstico y logging exhaustivo
 export async function loginWithGoogle(): Promise<GoogleLoginResult> {
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
@@ -262,6 +295,7 @@ export async function loginWithGoogle(): Promise<GoogleLoginResult> {
 
   try {
     const provider = new GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/spreadsheets');
     provider.setCustomParameters({ prompt: 'select_account' });
 
     // Protección con temporizador: si el navegador congela el popup en blanco por partición de storage
@@ -279,11 +313,17 @@ export async function loginWithGoogle(): Promise<GoogleLoginResult> {
     const result = await Promise.race([popupPromise, timeoutPromise]);
     const user = result.user;
 
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (credential?.accessToken) {
+      cachedAccessToken = credential.accessToken;
+    }
+
     console.log('✅ [Firebase Auth] Autenticación con Google exitosa:', {
       uid: user.uid,
       email: user.email,
       displayName: user.displayName,
       isAnonymous: user.isAnonymous,
+      hasSheetsToken: Boolean(cachedAccessToken),
     });
     console.groupEnd();
 
