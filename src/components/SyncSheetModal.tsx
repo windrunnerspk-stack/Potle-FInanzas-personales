@@ -19,7 +19,8 @@ import {
   Database,
   ExternalLink,
   FileDown,
-  HelpCircle
+  HelpCircle,
+  Smartphone
 } from 'lucide-react';
 import { Gasto, UsuarioConfig, LISTA_CATEGORIAS_DEFAULT } from '../types/finance';
 import {
@@ -41,6 +42,12 @@ import {
   extraerSpreadsheetId,
   ResultadoSubidaGoogleSheets
 } from '../services/googleSheetsSyncService';
+import {
+  exportarFacturasAGoogleDriveAndroid,
+  abrirEnlaceNativo,
+  enviarFacturasAAppsScriptWebhook,
+} from '../services/androidDriveExportService';
+import { Capacitor } from '@capacitor/core';
 import { loginWithGoogle, getGoogleAccessToken, solicitarPermisosGoogleSheets } from '../services/firebase';
 import { CategoryIcon } from './CategoryIcon';
 import { useTheme } from '../context/ThemeContext';
@@ -83,8 +90,9 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
   const [notificacionCopiado, setNotificacionCopiado] = useState(false);
   const [mostrarTutorial, setMostrarTutorial] = useState(false);
 
-  // Estados de subida directa a Google Sheets (Google Sheets API v4)
+  // Estados de subida directa a Google Sheets & Google Drive
   const [subiendoASheets, setSubiendoASheets] = useState(false);
+  const [subiendoADriveAndroid, setSubiendoADriveAndroid] = useState(false);
   const [confirmacionSubidaAbierta, setConfirmacionSubidaAbierta] = useState(false);
   const [errorSubida, setErrorSubida] = useState<string | null>(null);
   const [necesitaAutorizacion, setNecesitaAutorizacion] = useState(false);
@@ -97,7 +105,71 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
 
   const pendientes = gastos.filter((g) => !g.sincronizado).length;
 
+  /**
+   * Método nativo para Android (APK):
+   * Genera el archivo con las 18 columnas y abre el selector oficial de Android (Share Sheet),
+   * donde el usuario toca "Guardar en Drive" para subirlo directamente a la carpeta de su Google Drive.
+   */
+  const handleSubirAGoogleDriveAndroid = async () => {
+    setSubiendoADriveAndroid(true);
+    setErrorSubida(null);
+    setMensajeExito('');
+    try {
+      const res = await exportarFacturasAGoogleDriveAndroid(gastos);
+      if (res.success) {
+        sincronizarTodoConGoogleSheets();
+        onSynced();
+        setMensajeExito(res.mensaje);
+        try {
+          confetti({
+            particleCount: 50,
+            spread: 70,
+            origin: { y: 0.7 },
+            colors: ['#10b981', '#14b8a6', '#3b82f6'],
+          });
+        } catch {}
+      } else {
+        setErrorSubida(res.mensaje);
+      }
+    } catch (err: any) {
+      setErrorSubida('Error al preparar Google Drive: ' + (err?.message || 'Error'));
+    } finally {
+      setSubiendoADriveAndroid(false);
+    }
+  };
+
   const handleEjecutarSubidaDirecta = async () => {
+    // 1. Si es un Webhook de Apps Script
+    if (urlSheet.includes('script.google.com/macros/s/')) {
+      setSubiendoASheets(true);
+      setErrorSubida(null);
+      setMensajeExito('');
+      try {
+        const respWebhook = await enviarFacturasAAppsScriptWebhook(urlSheet, gastos);
+        if (respWebhook.success) {
+          sincronizarTodoConGoogleSheets();
+          onSynced();
+          setMensajeExito(respWebhook.mensaje);
+          try {
+            confetti({
+              particleCount: 50,
+              spread: 70,
+              origin: { y: 0.7 },
+              colors: ['#10b981', '#14b8a6', '#06b6d4'],
+            });
+          } catch {}
+        } else {
+          setErrorSubida(respWebhook.mensaje);
+        }
+      } catch (e: any) {
+        setErrorSubida('Error con Webhook: ' + (e?.message || 'Error'));
+      } finally {
+        setSubiendoASheets(false);
+        setConfirmacionSubidaAbierta(false);
+      }
+      return;
+    }
+
     const idExtraido = extraerSpreadsheetId(urlSheet);
     if (!idExtraido) {
       setErrorSubida('Por favor ingresa un enlace válido de tu hoja de Google Sheets.');
@@ -105,6 +177,37 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
     }
 
     guardarConfiguracion({ google_sheets_id: idExtraido });
+
+    // 2. Si estamos en APK nativa de Android y no hay token web cargado:
+    // Enviar directamente mediante el exportador nativo de Google Drive para evitar bloqueo de WebView
+    if (Capacitor.isNativePlatform() && !getGoogleAccessToken()) {
+      setSubiendoASheets(true);
+      setErrorSubida(null);
+      setConfirmacionSubidaAbierta(false);
+      try {
+        const resDrive = await exportarFacturasAGoogleDriveAndroid(gastos);
+        if (resDrive.success) {
+          sincronizarTodoConGoogleSheets();
+          onSynced();
+          setMensajeExito(resDrive.mensaje);
+          try {
+            confetti({
+              particleCount: 50,
+              spread: 70,
+              origin: { y: 0.7 },
+              colors: ['#10b981', '#14b8a6', '#06b6d4'],
+            });
+          } catch {}
+        } else {
+          setErrorSubida(resDrive.mensaje);
+        }
+      } finally {
+        setSubiendoASheets(false);
+      }
+      return;
+    }
+
+    // 3. Flujo Google Sheets API v4
     setSubiendoASheets(true);
     setErrorSubida(null);
     setMensajeExito('');
@@ -112,7 +215,7 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
 
     try {
       const res = await subirGastosAGoogleSheetDirecto(idExtraido, gastos, {
-        solicitarAuthSiFalta: true,
+        solicitarAuthSiFalta: !Capacitor.isNativePlatform(),
       });
 
       if (res.success) {
@@ -129,10 +232,16 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
         } catch {}
       } else {
         if (res.requiereAuth) {
-          setNecesitaAutorizacion(true);
-          setErrorSubida(
-            'Google requiere autorización de tu cuenta para poder escribir en tu hoja. Haz clic en "Autorizar con Google" para completar la sincronización.'
-          );
+          if (Capacitor.isNativePlatform()) {
+            setErrorSubida(
+              'En Android APK usa el botón «Subir a Google Drive (Android)» para enviar directamente a tu app de Drive instalada.'
+            );
+          } else {
+            setNecesitaAutorizacion(true);
+            setErrorSubida(
+              'Google requiere autorización de tu cuenta para poder escribir en tu hoja. Haz clic en "Autorizar con Google" para completar la sincronización.'
+            );
+          }
         } else {
           setErrorSubida(res.mensaje || 'No se pudo subir a la hoja.');
         }
@@ -146,6 +255,10 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
   };
 
   const handleAutorizarYSubir = async () => {
+    if (Capacitor.isNativePlatform()) {
+      await handleSubirAGoogleDriveAndroid();
+      return;
+    }
     setSubiendoASheets(true);
     setErrorSubida(null);
     try {
@@ -247,11 +360,33 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
     if (resp.exito && resp.contenido) {
       setTextoPegado(resp.contenido);
       setMetodoImportacion('pegar');
-      setMensajeExito('¡Datos descargados exitosamente desde tu enlace de Google Sheets!');
+
+      // Procesar y autoguardar de inmediato las facturas en la app / APK
+      const parseado = procesarImportacionGoogleSheets(resp.contenido);
+      if (parseado.exito && parseado.gastosImportados.length > 0) {
+        const { importados, totalGastos } = importarGastosDesdeGoogleSheets(
+          parseado.gastosImportados,
+          modoGuardado
+        );
+        onSynced();
+        try {
+          confetti({
+            particleCount: 50,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#10b981', '#14b8a6', '#3b82f6'],
+          });
+        } catch {}
+        setMensajeExito(
+          `¡Éxito total! Se importaron ${importados} facturas desde tu enlace de Google Sheets a la APK (${modoGuardado === 'reemplazar' ? 'reemplazando anteriores' : 'anexadas'}). Total en app: ${totalGastos}.`
+        );
+      } else {
+        setMensajeExito('¡Datos descargados de tu enlace! Revisa la vista previa para confirmar las columnas.');
+      }
     } else {
       setErrorUrl(
         resp.error ||
-          'No se pudo conectar directamente. Por favor copia las celdas en tu Google Sheet (Ctrl+C) y pégalas en la pestaña "Pegar Celdas Directas".'
+          'No se pudo conectar directamente. Si la hoja es privada en Drive, cámbiala a "Cualquiera con el enlace" o copia las celdas y pégalas en "Pegar Celdas Directas".'
       );
     }
   };
@@ -877,15 +1012,14 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                       Pega el enlace de tu Google Sheet personal para abrirla y vincularla:
                     </p>
                   </div>
-                  <a
-                    href="https://sheets.new"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-500 hover:underline"
+                  <button
+                    type="button"
+                    onClick={() => abrirEnlaceNativo('https://sheets.new')}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-500 hover:underline cursor-pointer"
                   >
                     <span>+ Crear Hoja Nueva en Blanco (sheets.new)</span>
                     <ExternalLink size={11} />
-                  </a>
+                  </button>
                 </div>
 
                 <div className="space-y-3">
@@ -911,54 +1045,105 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                           : 'bg-white text-slate-900 placeholder-slate-400 border-slate-300 focus:border-emerald-500'
                       }`}
                     />
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                      {/* Botón Principal: Subir a Google Drive (Especial para APK Android y Móvil) */}
                       <button
                         type="button"
-                        disabled={subiendoASheets}
+                        disabled={subiendoADriveAndroid || subiendoASheets}
+                        onClick={handleSubirAGoogleDriveAndroid}
+                        className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 text-neutral-950 hover:brightness-110 shadow-md shadow-emerald-500/25 transition-all cursor-pointer whitespace-nowrap active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        title="En Android APK: Abre el selector para guardar en Google Drive o abrir en Hojas de cálculo"
+                      >
+                        {subiendoADriveAndroid ? (
+                          <>
+                            <RefreshCw size={14} className="animate-spin" />
+                            <span>Enviando a Drive...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={14} />
+                            <span>Subir a Google Drive ({gastos.length})</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Botón Secundario: Subir directo a la hoja mediante API / Webhook */}
+                      <button
+                        type="button"
+                        disabled={subiendoASheets || subiendoADriveAndroid}
                         onClick={() => {
                           const id = extraerSpreadsheetId(urlSheet);
-                          if (!id) {
-                            setErrorSubida('Pega un enlace válido de Google Sheets (ejemplo: https://docs.google.com/spreadsheets/d/...)');
+                          if (!id && !urlSheet.includes('script.google.com')) {
+                            setErrorSubida('Pega un enlace válido de Google Sheets (ej: https://docs.google.com/spreadsheets/d/...)');
                             return;
                           }
                           setErrorSubida(null);
                           setConfirmacionSubidaAbierta(true);
                         }}
-                        className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 text-neutral-950 hover:brightness-110 shadow-md shadow-emerald-500/20 transition-all cursor-pointer whitespace-nowrap active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                        className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap active:scale-95 flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border-neutral-700 disabled:opacity-50"
+                        title="Escribe directamente en la hoja especificada por el enlace"
                       >
                         {subiendoASheets ? (
                           <>
-                            <RefreshCw size={14} className="animate-spin" />
-                            <span>Subiendo datos en vivo...</span>
+                            <RefreshCw size={13} className="animate-spin" />
+                            <span>Escribiendo...</span>
                           </>
                         ) : (
                           <>
-                            <Upload size={14} />
-                            <span>Subir a Google Sheet ({gastos.length})</span>
+                            <FileSpreadsheet size={13} />
+                            <span>Subir directo al Enlace</span>
                           </>
                         )}
                       </button>
 
+                      {/* Botón: Traer del Sheet (Descarga e importa automáticamente en la APK) */}
                       <button
                         type="button"
+                        disabled={cargandoUrl}
                         onClick={async () => {
                           const id = extraerSpreadsheetId(urlSheet);
                           if (id) {
                             guardarConfiguracion({ google_sheets_id: id });
                           }
-                          setPestaña('importar');
-                          setMetodoImportacion('url');
                           if (urlSheet.trim()) {
-                            handleCargarUrl();
+                            await handleCargarUrl();
+                          } else {
+                            setErrorSubida('Pega primero el enlace de tu Google Sheet para traer los datos.');
                           }
                         }}
-                        className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap active:scale-95 flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border-neutral-700"
-                        title="Descargar las facturas desde Google Sheets a esta app"
+                        className="flex-1 sm:flex-none px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer whitespace-nowrap active:scale-95 flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border-neutral-700 disabled:opacity-50"
+                        title="Descarga y carga las facturas desde Google Sheets directamente en la APK"
                       >
-                        <Download size={14} />
-                        <span>Traer del Sheet</span>
+                        {cargandoUrl ? (
+                          <>
+                            <RefreshCw size={13} className="animate-spin" />
+                            <span>Leyendo...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download size={13} />
+                            <span>Traer del Sheet</span>
+                          </>
+                        )}
                       </button>
                     </div>
+                  </div>
+
+                  {/* Tarjeta explicativa de compatibilidad APK Android */}
+                  <div
+                    className={`p-3 rounded-xl border text-[11px] space-y-1.5 ${
+                      isDark ? 'bg-neutral-900/60 border-neutral-800 text-neutral-300' : 'bg-slate-100/80 border-slate-200 text-slate-700'
+                    }`}
+                  >
+                    <div className="font-bold flex items-center gap-1.5 text-emerald-500">
+                      <Smartphone size={13} />
+                      <span>Sincronización Nativa para Android APK</span>
+                    </div>
+                    <p className="leading-relaxed text-[11px]">
+                      • <strong>Subir a Google Drive:</strong> Pulsa el botón verde <em>«Subir a Google Drive»</em> y en el menú de tu teléfono selecciona <strong>«Guardar en Drive»</strong>. Podrás elegir cualquier carpeta de tu cuenta de Google Drive para guardar el archivo con las 18 columnas oficiales.
+                      <br />
+                      • <strong>Traer facturas a la APK:</strong> Pega el enlace de tu Google Sheet y pulsa <em>«Traer del Sheet»</em>. Si tu hoja está en modo privado, recuerda activar <em>«Cualquiera con el enlace»</em> en Google Drive para permitir la lectura automática sin restricciones.
+                    </p>
                   </div>
 
                   {/* Diálogo de Confirmación Obligatorio para Operaciones en Google Workspace */}
@@ -1034,7 +1219,7 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                           className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-neutral-950 shrink-0 transition-all cursor-pointer flex items-center gap-1"
                         >
                           <CheckCircle2 size={12} />
-                          <span>Autorizar con Google y Subir</span>
+                          <span>{Capacitor.isNativePlatform() ? 'Subir a Drive (Nativo)' : 'Autorizar con Google'}</span>
                         </button>
                       )}
                     </motion.div>
@@ -1047,15 +1232,14 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                       <CheckCircle2 size={12} />
                       Hoja vinculada: <code className="bg-emerald-500/10 px-1 py-0.5 rounded text-[10px] font-mono">{config.google_sheets_id.slice(0, 16)}...</code>
                     </span>
-                    <a
-                      href={`https://docs.google.com/spreadsheets/d/${config.google_sheets_id}/edit`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-emerald-400 hover:underline inline-flex items-center gap-0.5 font-semibold"
+                    <button
+                      type="button"
+                      onClick={() => abrirEnlaceNativo(`https://docs.google.com/spreadsheets/d/${config.google_sheets_id}/edit`)}
+                      className="text-emerald-400 hover:underline inline-flex items-center gap-0.5 font-semibold cursor-pointer"
                     >
-                      <span>Abrir Hoja</span>
+                      <span>Abrir Hoja en Google Sheets</span>
                       <ExternalLink size={10} />
-                    </a>
+                    </button>
                   </div>
                 )}
               </div>
@@ -1082,16 +1266,17 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                     <span>Copiar Datos para Google Sheet (1 Clic)</span>
                   </button>
 
-                  {/* Enlace directo accesible (target="_blank") para abrir y verificar Google Sheets */}
-                  <a
-                    href={
-                      config.google_sheets_id
-                        ? `https://docs.google.com/spreadsheets/d/${config.google_sheets_id}/edit`
-                        : 'https://sheets.new'
+                  {/* Enlace directo accesible para abrir y verificar Google Sheets en móvil o web */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      abrirEnlaceNativo(
+                        config.google_sheets_id
+                          ? `https://docs.google.com/spreadsheets/d/${config.google_sheets_id}/edit`
+                          : 'https://sheets.new'
+                      )
                     }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                       isDark
                         ? 'bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border-neutral-700'
                         : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-xs'
@@ -1099,7 +1284,7 @@ export const SyncSheetModal: React.FC<SyncSheetModalProps> = ({
                   >
                     <ExternalLink size={13} />
                     <span>Abrir Mi Google Sheet</span>
-                  </a>
+                  </button>
 
                   {/* Exportación CSV Local para guardar sin Google Sheets */}
                   <button

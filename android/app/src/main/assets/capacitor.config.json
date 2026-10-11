@@ -9,5 +9,10 @@
 		"allowMixedContent": true,
 		"captureInput": true,
 		"webContentsDebuggingEnabled": false
+	},
+	"plugins": {
+		"CapacitorHttp": {
+			"enabled": true
+		}
 	}
 }

@@ -1,3 +1,4 @@
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import {
   Gasto,
   CategoriaGasto,
@@ -1094,24 +1095,58 @@ export async function descargarGoogleSheetsCSV(url: string): Promise<{
       `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`,
     ];
 
+    let detectoPaginaLogin = false;
+
     for (const fetchUrl of urlsToTry) {
       try {
-        const resp = await fetch(fetchUrl);
-        if (resp.ok) {
-          const text = await resp.text();
-          if (text && text.trim().length > 10 && !text.includes('<!DOCTYPE html>')) {
-            return { exito: true, contenido: text };
+        if (Capacitor.isNativePlatform()) {
+          // Solicitud nativa en Android con CapacitorHttp (sin restricciones de CORS del navegador)
+          const resp = await CapacitorHttp.get({
+            url: fetchUrl,
+            headers: {
+              Accept: 'text/csv,text/plain,*/*',
+            },
+          });
+
+          if (resp.status === 200 && resp.data) {
+            const text = typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
+            if (text.includes('<!DOCTYPE html>') || text.includes('accounts.google.com')) {
+              detectoPaginaLogin = true;
+            } else if (text.trim().length > 10) {
+              return { exito: true, contenido: text };
+            }
+          } else if (resp.status === 302 || resp.status === 401 || resp.status === 403) {
+            detectoPaginaLogin = true;
+          }
+        } else {
+          // Solicitud en entorno web
+          const resp = await fetch(fetchUrl);
+          if (resp.ok) {
+            const text = await resp.text();
+            if (text.includes('<!DOCTYPE html>') || text.includes('accounts.google.com')) {
+              detectoPaginaLogin = true;
+            } else if (text.trim().length > 10) {
+              return { exito: true, contenido: text };
+            }
           }
         }
-      } catch (e) {
-        // Ignorar y probar siguiente endpoint
+      } catch {
+        // Probar siguiente endpoint
       }
+    }
+
+    if (detectoPaginaLogin) {
+      return {
+        exito: false,
+        error:
+          'Tu hoja de Google Sheets está en modo "Restringido" (privada). Para que la app/APK pueda leerla: En Google Sheets/Drive toca "Compartir" y cambia el Acceso general a "Cualquiera con el enlace" (Lector o Editor).',
+      };
     }
 
     return {
       exito: false,
       error:
-        'No se pudo descargar automáticamente debido a permisos privados de Google Sheets o bloqueo CORS. Usa la opción "Pegar Celdas Directas (Ctrl+C en Google Sheets -> Pegar aquí)" que no requiere permisos y funciona al 100%.',
+        'No se pudo descargar automáticamente el archivo de Google Sheets. Asegúrate de que la hoja tenga el acceso general en "Cualquiera con el enlace". También puedes copiar las celdas y usar la pestaña "Pegar Celdas Directas".',
     };
   } catch (err: any) {
     return {
